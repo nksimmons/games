@@ -1,0 +1,112 @@
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+main {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+h1 {
+  margin: 0 0 0.5rem;
+}
+
+.lede {
+  margin-top: 0;
+  color: #94a3b8;
+}
+
+.card {
+  border: 1px solid #334155;
+  border-radius: 12px;
+  background: #111827;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+
+label {
+  display: block;
+  margin: 0.6rem 0 0.3rem;
+  font-weight: 600;
+}
+
+input,
+textarea,
+button {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 8px;
+  border: 1px solid #475569;
+  background: #0b1220;
+  color: #e2e8f0;
+  padding: 0.6rem;
+}
+
+button {
+  margin-top: 0.9rem;
+  background: #1d4ed8;
+  border-color: #1e40af;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.drop-zone {
+  margin-top: 0.8rem;
+  border: 2px dashed #475569;
+  border-radius: 10px;
+  padding: 1.4rem;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.drop-zone.active {
+  border-color: #3b82f6;
+  color: #bfdbfe;
+  background: #0b1730;
+}
+
+.download-link {
+  display: inline-block;
+  margin-top: 0.8rem;
+  color: #93c5fd;
+}
+
+.hidden {
+  display: none;
+}
+
+.subtle {
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+pre {
+  margin: 0;
+  min-height: 7rem;
+  max-height: 28rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: #020617;
+  padding: 0.8rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+a {
+  color: #93c5fd;
+}

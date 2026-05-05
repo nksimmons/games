@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Worlds Collide WASM</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main>
+    <h1>Worlds Collide WASM Prototype</h1>
+    <p class="lede">Client-side ROM patching in the browser via Pyodide. Upload your ROM, set flags, generate, and download.</p>
+
+    <section class="card">
+      <label for="romFile">Input ROM</label>
+      <input id="romFile" type="file" accept=".smc,.sfc,application/octet-stream">
+      <div id="dropZone" class="drop-zone">Drag and drop ROM here</div>
+      <p id="romMeta" class="subtle">No ROM selected.</p>
+    </section>
+
+    <section class="card">
+      <label for="seed">Seed (optional)</label>
+      <input id="seed" type="text" placeholder="leave blank for random">
+
+      <label for="flags">Flags</label>
+      <textarea id="flags" rows="6" placeholder="Example: -open -xpm 2 -mpm 2 -gpm 2 -be"></textarea>
+
+      <label for="outputName">Output filename</label>
+      <input id="outputName" type="text" placeholder="ff6wc_output.smc">
+
+      <button id="generateBtn" type="button" disabled>Loading runtime...</button>
+      <a id="downloadLink" class="download-link hidden" download>Download Patched ROM</a>
+      <p class="subtle">Note: This prototype only supports direct wc.py flags right now (no NL prompt parser UI yet).</p>
+    </section>
+
+    <section class="card">
+      <h2>Status</h2>
+      <pre id="statusLog"></pre>
+    </section>
+
+    <p><a href="../">Back to repo home</a></p>
+  </main>
+
+  <script src="./app.js" type="module"></script>
+</body>
+</html>
