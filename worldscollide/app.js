@@ -3,10 +3,25 @@ const els = {
   dropZone: document.getElementById("dropZone"),
   romMeta: document.getElementById("romMeta"),
   seed: document.getElementById("seed"),
-  flags: document.getElementById("flags"),
   outputName: document.getElementById("outputName"),
+  prompt: document.getElementById("prompt"),
+  extraFlags: document.getElementById("extraFlags"),
+  startGold: document.getElementById("startGold"),
+  startMoogleCharms: document.getElementById("startMoogleCharms"),
+  startWarpStones: document.getElementById("startWarpStones"),
+  startFenixDowns: document.getElementById("startFenixDowns"),
+  startTools: document.getElementById("startTools"),
+  includeObjectives: document.getElementById("includeObjectives"),
+  noRomOutput: document.getElementById("noRomOutput"),
+  stdoutLog: document.getElementById("stdoutLog"),
+  presetList: document.getElementById("presetList"),
+  presetModeFilter: document.getElementById("presetModeFilter"),
+  compileBtn: document.getElementById("compileBtn"),
   generateBtn: document.getElementById("generateBtn"),
   downloadLink: document.getElementById("downloadLink"),
+  notes: document.getElementById("notes"),
+  command: document.getElementById("command"),
+  result: document.getElementById("result"),
   statusLog: document.getElementById("statusLog"),
 };
 
@@ -15,6 +30,7 @@ const state = {
   selectedFile: null,
   downloadUrl: null,
   runInProgress: false,
+  presets: [],
 };
 
 const worker = new Worker("./worker.js", { type: "module" });
@@ -25,9 +41,31 @@ function appendStatus(text) {
   els.statusLog.scrollTop = els.statusLog.scrollHeight;
 }
 
+function renderResult(text) {
+  els.result.textContent = text || "";
+}
+
+function renderNotes(notes) {
+  els.notes.innerHTML = "";
+  if (!notes || !notes.length) {
+    const li = document.createElement("li");
+    li.textContent = "No notes generated.";
+    els.notes.appendChild(li);
+    return;
+  }
+
+  for (const note of notes) {
+    const li = document.createElement("li");
+    li.textContent = note;
+    els.notes.appendChild(li);
+  }
+}
+
 function updateGenerateButton() {
   const canRun = state.workerReady && !!state.selectedFile && !state.runInProgress;
   els.generateBtn.disabled = !canRun;
+  els.compileBtn.disabled = !state.workerReady || state.runInProgress;
+
   if (!state.workerReady) {
     els.generateBtn.textContent = "Loading runtime...";
   } else if (state.runInProgress) {
@@ -71,6 +109,70 @@ function clearDownload() {
   els.downloadLink.removeAttribute("href");
 }
 
+function selectedPresets() {
+  return [...document.querySelectorAll("input[name='preset']:checked")].map((x) => x.value);
+}
+
+function readOptionalInt(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return null;
+  }
+  const parsed = Number.parseInt(text, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function requestPayload() {
+  return {
+    seed: (els.seed.value || "").trim(),
+    prompt: els.prompt.value || "",
+    extraFlags: els.extraFlags.value || "",
+    startGold: readOptionalInt(els.startGold.value),
+    startMoogleCharms: readOptionalInt(els.startMoogleCharms.value),
+    startWarpStones: readOptionalInt(els.startWarpStones.value),
+    startFenixDowns: readOptionalInt(els.startFenixDowns.value),
+    startTools: readOptionalInt(els.startTools.value),
+    includeObjectives: !!els.includeObjectives.checked,
+    noRomOutput: !!els.noRomOutput.checked,
+    stdoutLog: !!els.stdoutLog.checked,
+    presets: selectedPresets(),
+  };
+}
+
+function renderPresetList() {
+  const selected = new Set(selectedPresets());
+  const filter = els.presetModeFilter.value || "all";
+  els.presetList.innerHTML = "";
+
+  for (const preset of state.presets) {
+    if (filter !== "all" && (preset.mode || "mixed") !== filter) {
+      continue;
+    }
+
+    const wrap = document.createElement("div");
+    wrap.className = "preset-item";
+
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.name = "preset";
+    checkbox.value = preset.name;
+    checkbox.checked = selected.has(preset.name);
+    label.appendChild(checkbox);
+
+    const modeSuffix = preset.mode ? ` [${preset.mode}]` : "";
+    label.append(` ${preset.name}${modeSuffix}`);
+
+    const desc = document.createElement("p");
+    desc.className = "subtle";
+    desc.textContent = preset.description;
+
+    wrap.appendChild(label);
+    wrap.appendChild(desc);
+    els.presetList.appendChild(wrap);
+  }
+}
+
 els.romFile.addEventListener("change", () => {
   const file = els.romFile.files?.[0] || null;
   if (file) {
@@ -102,6 +204,8 @@ els.dropZone.addEventListener("drop", (event) => {
   setSelectedFile(file);
 });
 
+els.presetModeFilter.addEventListener("change", renderPresetList);
+
 worker.onmessage = (event) => {
   const msg = event.data;
 
@@ -114,11 +218,28 @@ worker.onmessage = (event) => {
     state.workerReady = true;
     appendStatus("Pyodide runtime ready.");
     updateGenerateButton();
+    worker.postMessage({ type: "presets" });
+    return;
+  }
+
+  if (msg.type === "presets") {
+    state.presets = msg.presets || [];
+    renderPresetList();
+    appendStatus(`Loaded ${state.presets.length} presets.`);
+    return;
+  }
+
+  if (msg.type === "compiled") {
+    renderNotes(msg.notes || []);
+    els.command.textContent = msg.commandText || "";
+    renderResult("Compile successful.");
+    appendStatus("Compile complete.");
     return;
   }
 
   if (msg.type === "error") {
     state.runInProgress = false;
+    renderResult(`Error: ${msg.message}`);
     appendStatus(`ERROR: ${msg.message}`);
     updateGenerateButton();
     return;
@@ -133,9 +254,30 @@ worker.onmessage = (event) => {
     els.downloadLink.href = state.downloadUrl;
     els.downloadLink.download = msg.fileName || "worlds_collide_output.smc";
     els.downloadLink.classList.remove("hidden");
+
+    renderNotes(msg.notes || []);
+    els.command.textContent = msg.commandText || "";
+    const output = [
+      "Generation finished.",
+      "",
+      "STDOUT:",
+      msg.stdout || "",
+      "",
+      "STDERR:",
+      msg.stderr || "",
+    ].join("\n");
+    renderResult(output);
     updateGenerateButton();
   }
 };
+
+els.compileBtn.addEventListener("click", () => {
+  if (!state.workerReady || state.runInProgress) {
+    return;
+  }
+  renderResult("Compiling...");
+  worker.postMessage({ type: "compile", ...requestPayload() });
+});
 
 els.generateBtn.addEventListener("click", async () => {
   if (!state.selectedFile || !state.workerReady || state.runInProgress) {
@@ -154,9 +296,8 @@ els.generateBtn.addEventListener("click", async () => {
     {
       type: "generate",
       romBuffer,
-      flags: els.flags.value || "",
-      seed: (els.seed.value || "").trim(),
       outputName,
+      ...requestPayload(),
     },
     [romBuffer]
   );
@@ -164,3 +305,4 @@ els.generateBtn.addEventListener("click", async () => {
 
 appendStatus("Starting worker...");
 worker.postMessage({ type: "init" });
+updateGenerateButton();

@@ -41,9 +41,23 @@ label {
   font-weight: 600;
 }
 
+fieldset {
+  margin: 1rem 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0.9rem;
+  background: #fffdf8;
+}
+
+legend {
+  font-weight: 700;
+  padding: 0 0.35rem;
+}
+
 input,
 textarea,
-button {
+button,
+select {
   width: 100%;
   box-sizing: border-box;
   border-radius: 8px;
@@ -55,7 +69,8 @@ button {
 
 input:focus,
 textarea:focus,
-button:focus {
+button:focus,
+select:focus {
   outline: 3px solid #bfdbfe;
   outline-offset: 1px;
 }
@@ -96,6 +111,63 @@ button:disabled {
   color: #1d4ed8;
 }
 
+.grid-two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.button-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.button-row button {
+  margin-top: 0;
+}
+
+.toggle-row {
+  margin: 1rem 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.toggle input {
+  width: auto;
+}
+
+.preset-list {
+  margin-top: 0.7rem;
+  max-height: 15rem;
+  overflow: auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 0.5rem;
+}
+
+.preset-item {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 0.45rem 0;
+}
+
+.preset-item:last-child {
+  border-bottom: none;
+}
+
+#notes {
+  margin-top: 0;
+  padding-left: 1.2rem;
+}
+
 .hidden {
   display: none;
 }
@@ -122,4 +194,11 @@ pre {
 
 a {
   color: #1d4ed8;
+}
+
+@media (max-width: 760px) {
+  .grid-two,
+  .button-row {
+    grid-template-columns: 1fr;
+  }
 }

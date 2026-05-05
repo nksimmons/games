@@ -9,7 +9,7 @@
 <body>
   <main>
     <h1>Worlds Collide WASM Prototype</h1>
-    <p class="lede">Client-side ROM patching in the browser via Pyodide. Upload your ROM, set flags, generate, and download.</p>
+    <p class="lede">Client-side ROM patching in the browser via Pyodide. Upload your ROM, configure a seed with presets or prompt guidance, compile, generate, and download.</p>
 
     <section class="card">
       <label for="romFile">Input ROM</label>
@@ -22,18 +22,72 @@
       <label for="seed">Seed (optional)</label>
       <input id="seed" type="text" placeholder="leave blank for random">
 
-      <label for="flags">Flags</label>
-      <textarea id="flags" rows="6" placeholder="Example: -open -xpm 2 -mpm 2 -gpm 2 -be"></textarea>
+      <label for="prompt">Intent Prompt (optional)</label>
+      <textarea id="prompt" rows="3" placeholder="Example: casual seed, open world, double xp/mp, boss exp"></textarea>
+
+      <label for="extraFlags">Extra Flags (optional)</label>
+      <input id="extraFlags" type="text" placeholder="Example: -be -xpm 2">
+
+      <fieldset>
+        <legend>Starting Resources</legend>
+        <div class="grid-two">
+          <label for="startGold">Starting Gold
+            <input id="startGold" type="number" min="0" max="999999" placeholder="25000">
+          </label>
+          <label for="startMoogleCharms">Moogle Charms
+            <input id="startMoogleCharms" type="number" min="0" max="3" placeholder="0">
+          </label>
+          <label for="startWarpStones">Warp Stones
+            <input id="startWarpStones" type="number" min="0" max="10" placeholder="0">
+          </label>
+          <label for="startFenixDowns">Fenix Downs
+            <input id="startFenixDowns" type="number" min="0" max="10" placeholder="0">
+          </label>
+          <label for="startTools">Starting Tools
+            <input id="startTools" type="number" min="0" max="8" placeholder="0">
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Presets</legend>
+        <label for="presetModeFilter">Mode Filter</label>
+        <select id="presetModeFilter">
+          <option value="all">All Modes</option>
+          <option value="open-world">Open World</option>
+          <option value="character-gating">Character Gating</option>
+          <option value="mixed">Mixed/Other</option>
+        </select>
+        <div id="presetList" class="preset-list"></div>
+      </fieldset>
+
+      <div class="toggle-row">
+        <label class="toggle"><input id="includeObjectives" type="checkbox"> Include Default Objectives</label>
+        <label class="toggle"><input id="noRomOutput" type="checkbox"> Include -nro in compile command</label>
+        <label class="toggle"><input id="stdoutLog" type="checkbox" checked> Include -slog</label>
+      </div>
 
       <label for="outputName">Output filename</label>
       <input id="outputName" type="text" placeholder="ff6wc_output.smc">
 
-      <button id="generateBtn" type="button" disabled>Loading runtime...</button>
+      <div class="button-row">
+        <button id="compileBtn" type="button" disabled>Compile</button>
+        <button id="generateBtn" type="button" disabled>Loading runtime...</button>
+      </div>
       <a id="downloadLink" class="download-link hidden" download>Download Patched ROM</a>
-      <p class="subtle">Note: This prototype only supports direct wc.py flags right now (no NL prompt parser UI yet).</p>
+      <p class="subtle">Note: Add-ons remain disabled in this build. Presets, prompt parsing, resources, and compile preview are restored.</p>
     </section>
 
     <section class="card">
+      <h2>Notes</h2>
+      <ul id="notes"></ul>
+
+      <h2>Command</h2>
+      <pre id="command"></pre>
+
+      <h2>Result</h2>
+      <pre id="result"></pre>
+
       <h2>Status</h2>
       <pre id="statusLog"></pre>
     </section>
