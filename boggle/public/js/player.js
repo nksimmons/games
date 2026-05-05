@@ -1,19 +1,18 @@
 const BG_COLORS = ['#e63946','#457b9d','#2a9d8f','#e9c46a','#f4a261','#264653','#6a4c93','#1982c4','#8ac926','#ff595e','#ff924c','#c77dff'];
 const DRAW_COLORS = ['#ffffff','#ff4444','#ff8800','#ffdd00','#44cc44','#2299ff','#aa44ff','#ff66cc','#88ccff','#aaaaaa'];
-const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
 const queryParams = new URLSearchParams(location.search);
-const useRtc = queryParams.get('transport') === 'webrtc';
-const rtcRoomCode = (queryParams.get('room') || '').trim().toUpperCase();
+const useRtc = true;
+const offerCodeFromQuery = (queryParams.get('offer') || '').trim();
 
-let ws;
 let playerId = null;
 let state = null;
 let selectedPath = []; // indices into the 4x4 grid
 let isDragging = false;
 let avatarChoice = { drawing: null, bgColor: BG_COLORS[0] };
-let rtcHostPeerId = null;
 let rtcPc = null;
 let rtcChannel = null;
+let rtcConnectionId = null;
+let localIceCandidates = [];
 
 // --- Device Identity (persistent across sessions) ---
 function getDeviceId() {
@@ -238,11 +237,12 @@ function updateAvatarPreview() {
   }
 }
 
-// --- WebSocket ---
-function sendWs(msg) {
-  if (ws && ws.readyState === 1) {
-    ws.send(JSON.stringify(msg));
-  }
+function encodeSignal(payload) {
+  return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+}
+
+function decodeSignal(raw) {
+  return JSON.parse(decodeURIComponent(escape(atob(String(raw || '').trim()))));
 }
 
 function setupRtcChannel(channel) {
@@ -253,18 +253,16 @@ function setupRtcChannel(channel) {
     rtcChannel.send(JSON.stringify({ type: 'player-ready' }));
   };
 
-  rtcChannel.onmessage = (event) => {
+  rtcChannel.onmessage = async (event) => {
     try {
       const msg = JSON.parse(event.data);
       if (msg.type === 'host-hello') {
-        console.log('[rtc][player] connected to room', msg.roomCode || 'unknown');
+        console.log('[rtc][player] connected to host', msg.connectionId || 'unknown');
         return;
       }
 
-      if (msg.type === 'server-direct' && msg.payload) {
-        processServerMessage(msg.payload, 'rtc');
-        return;
-      }
+      await processServerMessage(msg, 'rtc');
+      return;
     } catch {
       // ignore malformed rtc debug messages
     }
@@ -283,8 +281,8 @@ function ensureRtcPc() {
   });
 
   rtcPc.onicecandidate = (event) => {
-    if (!event.candidate || !rtcHostPeerId) return;
-    sendWs({ type: 'rtc-signal', to: rtcHostPeerId, signal: { type: 'candidate', candidate: event.candidate } });
+    if (!event.candidate) return;
+    localIceCandidates.push(event.candidate);
   };
 
   rtcPc.ondatachannel = (event) => {
@@ -294,64 +292,51 @@ function ensureRtcPc() {
   return rtcPc;
 }
 
-async function handleRtcSignal(msg) {
-  const signal = msg.signal || {};
-  const from = msg.from;
-  if (!from || !signal.type) return;
-
-  rtcHostPeerId = from;
-  const pc = ensureRtcPc();
-
-  if (signal.type === 'offer') {
-    await pc.setRemoteDescription({ type: 'offer', sdp: signal.sdp });
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    sendWs({ type: 'rtc-signal', to: from, signal: { type: 'answer', sdp: answer.sdp } });
+async function connect() {
+  const offered = offerCodeFromQuery || prompt('Paste host offer code');
+  if (!offered) {
+    console.warn('[rtc][player] no offer code provided');
     return;
   }
 
-  if (signal.type === 'candidate' && signal.candidate) {
-    try {
-      await pc.addIceCandidate(signal.candidate);
-    } catch (err) {
-      console.warn('[rtc][player] candidate add failed:', err.message);
-    }
+  let decoded;
+  try {
+    decoded = decodeSignal(offered);
+  } catch {
+    alert('Invalid host offer code');
+    return;
   }
-}
 
-function connect() {
-  const basePath = location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
-  ws = new WebSocket(`${wsProtocol}://${location.host}${basePath}`);
+  rtcConnectionId = decoded.connectionId || null;
+  const pc = ensureRtcPc();
 
-  ws.onopen = () => {
-    // Try to reconnect with device identity
-    send({ type: 'reconnect', deviceId });
-
-    if (useRtc) {
-      const prompted = prompt('Enter host room code');
-      const room = rtcRoomCode || String(prompted || '').trim().toUpperCase();
-      if (room) {
-        sendWs({ type: 'rtc-join', roomCode: room });
+  await pc.setRemoteDescription({ type: 'offer', sdp: decoded.sdp });
+  if (Array.isArray(decoded.candidates)) {
+    for (const candidate of decoded.candidates) {
+      try {
+        await pc.addIceCandidate(candidate);
+      } catch {
+        // ignore candidate failure
       }
     }
-  };
+  }
 
-  ws.onmessage = async (event) => {
-    const msg = JSON.parse(event.data);
-    await processServerMessage(msg, 'ws');
-  };
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
 
-  ws.onclose = () => {
-    setTimeout(connect, 2000);
-  };
+  setTimeout(() => {
+    const code = encodeSignal({
+      connectionId: rtcConnectionId,
+      type: 'answer',
+      sdp: pc.localDescription ? pc.localDescription.sdp : answer.sdp,
+      candidates: localIceCandidates,
+    });
+    prompt('Share this answer code back to host', code);
+  }, 300);
 }
 
 async function processServerMessage(msg, source) {
-  const gameplayTypes = new Set(['state', 'players', 'timer', 'word-result']);
-  if (useRtc && source === 'ws' && gameplayTypes.has(msg.type)) {
-    // In WebRTC mode these messages are expected through RTC relays.
-    return;
-  }
+  if (source !== 'rtc') return;
 
   switch (msg.type) {
     case 'joined':
@@ -386,45 +371,29 @@ async function processServerMessage(msg, source) {
     case 'word-result':
       handleWordResult(msg);
       break;
-    case 'rtc-joined':
-      rtcHostPeerId = msg.hostPeerId || rtcHostPeerId;
-      console.log('[rtc][player] joined room', msg.roomCode);
-      break;
-    case 'rtc-signal':
-      await handleRtcSignal(msg);
-      break;
-    case 'rtc-peer-left':
-      if (msg.peerId === rtcHostPeerId && rtcPc) {
-        try { rtcPc.close(); } catch {}
-        rtcPc = null;
-        rtcChannel = null;
-      }
-      break;
-    case 'rtc-error':
-      console.warn('[rtc][player] signaling error:', msg.message);
-      break;
   }
 }
 
 function send(msg) {
-  const canUseRtcAction =
-    useRtc &&
-    rtcChannel &&
-    rtcChannel.readyState === 'open' &&
-    (
-      msg.type === 'submit-path' ||
-      msg.type === 'submit-word' ||
-      msg.type === 'start-game' ||
-      msg.type === 'next-round' ||
-      msg.type === 'restart'
-    );
-
-  if (canUseRtcAction) {
-    rtcChannel.send(JSON.stringify({ type: 'client-action', payload: msg }));
+  if (!rtcChannel || rtcChannel.readyState !== 'open') {
     return;
   }
 
-  sendWs(msg);
+  if (msg.type === 'player-join') {
+    rtcChannel.send(JSON.stringify(msg));
+    return;
+  }
+
+  if (
+    msg.type === 'submit-path' ||
+    msg.type === 'submit-word' ||
+    msg.type === 'start-game' ||
+    msg.type === 'next-round' ||
+    msg.type === 'restart'
+  ) {
+    rtcChannel.send(JSON.stringify({ type: 'client-action', payload: msg }));
+    return;
+  }
 }
 
 // --- Render ---

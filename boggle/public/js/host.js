@@ -1,174 +1,743 @@
 const basePath = location.pathname.substring(0, location.pathname.lastIndexOf('/') + 1);
-const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
-const params = new URLSearchParams(location.search);
-const useRtc = params.get('transport') === 'webrtc';
-let ws;
 let state = null;
-let rtcRoomCode = null;
-const rtcPeers = new Map(); // peerId -> { pc, channel }
+let gameState = null;
+let dictionary = null;
+const rtcPeers = new Map(); // connectionId -> { pc, channel, playerId }
+let nextPlayerId = 1;
+let timerInterval = null;
 
-function sendWs(msg) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(msg));
+const ROUND_DURATION = 90;
+const MAX_ROUNDS = 5;
+const UNIQUE_BONUS = 2;
+
+const DICE_4x4 = [
+  'AAEEGN', 'ABBJOO', 'ACHOPS', 'AFFKPS',
+  'AOOTTW', 'CIMOTU', 'DEILRX', 'DELRVY',
+  'DISTTY', 'EEGHNW', 'EEINSU', 'EHRTVW',
+  'EIOSST', 'ELRTTY', 'HIMNQU', 'HLNNRZ',
+];
+
+class TrieNode {
+  constructor() {
+    this.children = {};
+    this.isWord = false;
   }
 }
 
-function forwardToRtcPeer(peerId, payload) {
-  const peer = rtcPeers.get(peerId);
-  if (!peer || !peer.channel || peer.channel.readyState !== 'open') {
-    return;
+class Dictionary {
+  constructor() {
+    this.root = new TrieNode();
+    this.wordSet = new Set();
   }
 
-  peer.channel.send(JSON.stringify({ type: 'server-direct', payload }));
+  insert(word) {
+    const lower = String(word || '').toLowerCase().trim();
+    if (!/^[a-z]{3,}$/.test(lower)) return;
+    if (this.wordSet.has(lower)) return;
+
+    this.wordSet.add(lower);
+    let node = this.root;
+    for (const ch of lower) {
+      if (!node.children[ch]) node.children[ch] = new TrieNode();
+      node = node.children[ch];
+    }
+    node.isWord = true;
+  }
+
+  isWord(word) {
+    return this.wordSet.has(String(word || '').toLowerCase().trim());
+  }
+
+  hasPrefix(prefix) {
+    let node = this.root;
+    for (const ch of String(prefix || '').toLowerCase()) {
+      if (!node.children[ch]) return false;
+      node = node.children[ch];
+    }
+    return true;
+  }
 }
 
-async function createRtcPeerForPlayer(playerPeerId) {
-  const pc = new RTCPeerConnection({
-    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+function createFreshState() {
+  return {
+    phase: 'lobby',
+    players: new Map(),
+    board: null,
+    round: 0,
+    maxRounds: MAX_ROUNDS,
+    timerEnd: null,
+    roundWords: new Map(),
+    validWordsOnBoard: new Set(),
+    hostPlayerId: null,
+    scoringPhases: null,
+  };
+}
+
+gameState = createFreshState();
+
+function sanitize(str) {
+  return String(str || '').replace(/[<>&"']/g, '');
+}
+
+function sanitizeAvatar(avatar) {
+  const clean = {};
+  if (avatar && avatar.bgColor) {
+    clean.bgColor = sanitize(String(avatar.bgColor)).substring(0, 30);
+  }
+  if (avatar && avatar.drawing && typeof avatar.drawing === 'string') {
+    if (avatar.drawing.startsWith('data:image/png;base64,') && avatar.drawing.length <= 15000) {
+      clean.drawing = avatar.drawing;
+    }
+  }
+  return clean;
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function generateBoard() {
+  const shuffledDice = shuffle([...DICE_4x4]);
+  const letters = shuffledDice.map((die) => {
+    const face = die[Math.floor(Math.random() * die.length)];
+    return face === 'Q' ? 'Qu' : face;
   });
 
-  const channel = pc.createDataChannel('boggle-game');
-  channel.onopen = () => {
-    console.log('[rtc][host] datachannel open ->', playerPeerId);
-    channel.send(JSON.stringify({ type: 'host-hello', roomCode: rtcRoomCode }));
-  };
-  channel.onmessage = (event) => {
-    try {
-      const msg = JSON.parse(event.data);
-      if (msg.type === 'client-action' && msg.payload) {
-        sendWs({
-          type: 'rtc-relay-action',
-          fromPeerId: playerPeerId,
-          action: msg.payload,
-        });
-        return;
-      }
+  return [
+    letters.slice(0, 4),
+    letters.slice(4, 8),
+    letters.slice(8, 12),
+    letters.slice(12, 16),
+  ];
+}
 
-      console.log('[rtc][host] channel message from', playerPeerId, msg.type || 'unknown');
+function getNeighbors(row, col, gridSize) {
+  const neighbors = [];
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      if (dr === 0 && dc === 0) continue;
+      const nr = row + dr;
+      const nc = col + dc;
+      if (nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize) {
+        neighbors.push([nr, nc]);
+      }
+    }
+  }
+  return neighbors;
+}
+
+function findAllWords(board, dict) {
+  const gridSize = board.length;
+  const totalTiles = gridSize * gridSize;
+  const maxWordLen = totalTiles;
+  const found = new Set();
+  const flatBoard = [];
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize; c++) {
+      flatBoard.push(board[r][c].toLowerCase());
+    }
+  }
+
+  function dfs(pos, word, visited) {
+    const cell = flatBoard[pos];
+    const newWord = word + cell;
+
+    if (newWord.length > maxWordLen) return;
+    if (!dict.hasPrefix(newWord)) return;
+
+    if (newWord.length >= 3 && dict.isWord(newWord)) {
+      found.add(newWord);
+    }
+
+    const r = Math.floor(pos / gridSize);
+    const c = pos % gridSize;
+    const neighbors = getNeighbors(r, c, gridSize);
+    for (const [nr, nc] of neighbors) {
+      const npos = nr * gridSize + nc;
+      if (!visited.has(npos)) {
+        visited.add(npos);
+        dfs(npos, newWord, visited);
+        visited.delete(npos);
+      }
+    }
+  }
+
+  for (let pos = 0; pos < totalTiles; pos++) {
+    const visited = new Set([pos]);
+    dfs(pos, '', visited);
+  }
+
+  return found;
+}
+
+function getBaseScore(length) {
+  if (length < 3) return 0;
+  if (length <= 4) return 1;
+  if (length === 5) return 2;
+  if (length === 6) return 3;
+  if (length === 7) return 5;
+  return 11;
+}
+
+function getLengthBonus(length) {
+  return length >= 8 ? 1 : 0;
+}
+
+function getScore(length) {
+  return getBaseScore(length) + getLengthBonus(length);
+}
+
+function scoreRound(roundWords) {
+  const allWords = new Map();
+  for (const [pid, words] of roundWords) {
+    for (const entry of words) {
+      if (!entry.valid) continue;
+      if (!allWords.has(entry.word)) allWords.set(entry.word, []);
+      allWords.get(entry.word).push(pid);
+    }
+  }
+
+  const commonItems = [];
+  const commonScores = {};
+  for (const [word, finders] of allWords) {
+    if (finders.length < 2) continue;
+    const total = getBaseScore(word.length) + getLengthBonus(word.length);
+    commonItems.push({ word, score: total, playerIds: finders });
+    for (const pid of finders) {
+      commonScores[pid] = (commonScores[pid] || 0) + total;
+    }
+  }
+
+  const uniqueItems = [];
+  const uniqueScores = {};
+  for (const [word, finders] of allWords) {
+    if (finders.length !== 1) continue;
+    const pid = finders[0];
+    const base = getBaseScore(word.length);
+    const lengthBonus = getLengthBonus(word.length);
+    const total = base + lengthBonus + UNIQUE_BONUS;
+    uniqueItems.push({
+      playerId: pid,
+      word,
+      baseScore: base,
+      lengthBonus,
+      uniqueBonus: UNIQUE_BONUS,
+      totalScore: total,
+    });
+    uniqueScores[pid] = (uniqueScores[pid] || 0) + total;
+  }
+
+  for (const [pid, words] of roundWords) {
+    for (const entry of words) {
+      if (!entry.valid) {
+        entry.finalScore = 0;
+        entry.reason = 'invalid';
+        continue;
+      }
+      const finders = allWords.get(entry.word) || [];
+      if (finders.length > 1) {
+        entry.finalScore = getBaseScore(entry.word.length) + getLengthBonus(entry.word.length);
+        entry.reason = 'common';
+      } else {
+        entry.finalScore = getBaseScore(entry.word.length) + getLengthBonus(entry.word.length) + UNIQUE_BONUS;
+        entry.reason = 'unique';
+      }
+    }
+  }
+
+  const playerRoundScores = {};
+  for (const [pid] of roundWords) {
+    playerRoundScores[pid] = (commonScores[pid] || 0) + (uniqueScores[pid] || 0);
+  }
+
+  return {
+    commonItems,
+    uniqueItems,
+    playerRoundScores,
+  };
+}
+
+function sendToRtcPlayer(playerId, payload) {
+  for (const [, peer] of rtcPeers) {
+    if (peer.playerId !== playerId) continue;
+    if (!peer.channel || peer.channel.readyState !== 'open') continue;
+    peer.channel.send(JSON.stringify(payload));
+  }
+}
+
+function broadcastToRtcPlayers(payload) {
+  for (const [, peer] of rtcPeers) {
+    if (!peer.playerId) continue;
+    if (!peer.channel || peer.channel.readyState !== 'open') continue;
+    peer.channel.send(JSON.stringify(payload));
+  }
+}
+
+function getPlayerList() {
+  return [...gameState.players.values()].map((p) => ({
+    id: p.id,
+    name: p.name,
+    avatar: p.avatar,
+    totalScore: p.totalScore,
+    connected: p.connected,
+    roundWins: p.roundWins || 0,
+    stats: null,
+  }));
+}
+
+function getHostState() {
+  const players = getPlayerList();
+  const playerWordCounts = {};
+  for (const [pid, words] of gameState.roundWords) {
+    playerWordCounts[pid] = words.filter((w) => w.valid).length;
+  }
+
+  let roundResults = null;
+  let scoringPhases = null;
+  if (gameState.phase === 'roundEnd' || gameState.phase === 'gameOver') {
+    roundResults = {};
+    for (const [pid, words] of gameState.roundWords) {
+      roundResults[pid] = words;
+    }
+    scoringPhases = gameState.scoringPhases || null;
+  }
+
+  return {
+    phase: gameState.phase,
+    board: gameState.board,
+    round: gameState.round,
+    maxRounds: gameState.maxRounds,
+    players: players.sort((a, b) => b.totalScore - a.totalScore),
+    playerWordCounts,
+    roundResults,
+    scoringPhases,
+    timerEnd: gameState.timerEnd,
+  };
+}
+
+function getPlayerState(playerId) {
+  const myWords = gameState.roundWords.get(playerId) || [];
+  return {
+    phase: gameState.phase,
+    board: gameState.board,
+    round: gameState.round,
+    maxRounds: gameState.maxRounds,
+    myWords,
+    players: getPlayerList().sort((a, b) => b.totalScore - a.totalScore),
+    timerEnd: gameState.timerEnd,
+    hostPlayerId: gameState.hostPlayerId,
+  };
+}
+
+function broadcastHostState() {
+  renderWithState(getHostState());
+}
+
+function broadcastPlayerList() {
+  const list = getPlayerList();
+  broadcastToRtcPlayers({ type: 'players', players: list });
+}
+
+function broadcastAllPlayers() {
+  for (const [id] of gameState.players) {
+    sendToRtcPlayer(id, { type: 'state', data: getPlayerState(id) });
+  }
+}
+
+function broadcastTimer(remaining) {
+  updateTimer(remaining);
+  broadcastToRtcPlayers({ type: 'timer', remaining });
+}
+
+function resetGame() {
+  const players = gameState.players;
+  const hostPlayerId = gameState.hostPlayerId;
+
+  for (const [, p] of players) {
+    p.totalScore = 0;
+    p.roundScores = [];
+    p.roundWins = 0;
+  }
+
+  gameState = {
+    ...createFreshState(),
+    players,
+    hostPlayerId,
+  };
+}
+
+function startRound() {
+  gameState.round++;
+
+  const MIN_LONG_WORDS = 8;
+  const MAX_ATTEMPTS = 30;
+  let board;
+  let allWords;
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    board = generateBoard();
+    allWords = findAllWords(board, dictionary);
+    const longWords = [...allWords].filter((w) => w.length >= 5);
+    if (longWords.length >= MIN_LONG_WORDS) break;
+  }
+
+  if (!allWords) {
+    allWords = findAllWords(board, dictionary);
+  }
+
+  gameState.board = board;
+  gameState.validWordsOnBoard = allWords;
+  gameState.phase = 'playing';
+  gameState.roundWords = new Map();
+  gameState.timerEnd = Date.now() + ROUND_DURATION * 1000;
+
+  for (const [id] of gameState.players) {
+    gameState.roundWords.set(id, []);
+  }
+
+  broadcastHostState();
+  broadcastAllPlayers();
+
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    const remaining = Math.max(0, Math.ceil((gameState.timerEnd - Date.now()) / 1000));
+    broadcastTimer(remaining);
+    if (remaining <= 0) {
+      clearInterval(timerInterval);
+      endRound();
+    }
+  }, 1000);
+}
+
+function endRound() {
+  gameState.phase = gameState.round >= gameState.maxRounds ? 'gameOver' : 'roundEnd';
+
+  const scored = scoreRound(gameState.roundWords);
+
+  for (const [pid] of gameState.roundWords) {
+    const roundScore = scored.playerRoundScores[pid] || 0;
+    const player = gameState.players.get(pid);
+    if (player) {
+      player.roundScores.push(roundScore);
+      player.totalScore += roundScore;
+    }
+  }
+
+  gameState.scoringPhases = [
+    { phase: 'common', items: scored.commonItems },
+    { phase: 'unique', items: scored.uniqueItems },
+  ];
+
+  let bestScore = 0;
+  let winnerId = null;
+  for (const [pid] of gameState.roundWords) {
+    const roundScore = scored.playerRoundScores[pid] || 0;
+    if (roundScore > bestScore) {
+      bestScore = roundScore;
+      winnerId = pid;
+    }
+  }
+  if (winnerId) {
+    const winner = gameState.players.get(winnerId);
+    if (winner) winner.roundWins++;
+  }
+
+  broadcastHostState();
+  broadcastAllPlayers();
+}
+
+function handleWordSubmission(playerId, word) {
+  if (word.length < 3) {
+    sendToRtcPlayer(playerId, { type: 'word-result', word, valid: false, reason: 'too short' });
+    return;
+  }
+
+  const playerWords = gameState.roundWords.get(playerId) || [];
+  if (playerWords.some((w) => w.word === word)) {
+    sendToRtcPlayer(playerId, { type: 'word-result', word, valid: false, reason: 'already submitted' });
+    return;
+  }
+
+  const inDict = dictionary.isWord(word);
+  const onBoard = inDict && gameState.validWordsOnBoard.has(word);
+  const valid = inDict && onBoard;
+  const score = valid ? getScore(word.length) : 0;
+
+  const entry = { word, valid, score, reason: !inDict ? 'not a word' : !onBoard ? 'not on board' : 'ok' };
+  playerWords.push(entry);
+  gameState.roundWords.set(playerId, playerWords);
+
+  sendToRtcPlayer(playerId, { type: 'word-result', word, valid, score, reason: entry.reason });
+  broadcastHostState();
+}
+
+function handlePathSubmission(playerId, pathIndices) {
+  if (!gameState.board) return;
+  const gridSize = gameState.board.length;
+  const totalTiles = gridSize * gridSize;
+
+  const seen = new Set();
+  let word = '';
+  for (let i = 0; i < pathIndices.length; i++) {
+    const idx = pathIndices[i];
+    if (typeof idx !== 'number' || idx < 0 || idx >= totalTiles) return;
+    if (seen.has(idx)) return;
+
+    if (i > 0) {
+      const prevIdx = pathIndices[i - 1];
+      const pr = Math.floor(prevIdx / gridSize);
+      const pc = prevIdx % gridSize;
+      const cr = Math.floor(idx / gridSize);
+      const cc = idx % gridSize;
+      if (Math.abs(pr - cr) > 1 || Math.abs(pc - cc) > 1) return;
+    }
+
+    seen.add(idx);
+    const r = Math.floor(idx / gridSize);
+    const c = idx % gridSize;
+    word += gameState.board[r][c];
+  }
+
+  handleWordSubmission(playerId, word.toLowerCase());
+}
+
+function handlePlayerAction(playerId, action) {
+  if (!playerId || !action || typeof action !== 'object') return;
+
+  switch (action.type) {
+    case 'start-game':
+      if (playerId !== gameState.hostPlayerId) return;
+      if (gameState.players.size === 0) return;
+      if (gameState.phase !== 'lobby' && gameState.phase !== 'gameOver') return;
+      resetGame();
+      startRound();
+      return;
+    case 'next-round':
+      if (playerId !== gameState.hostPlayerId) return;
+      if (gameState.phase !== 'roundEnd') return;
+      startRound();
+      return;
+    case 'restart':
+      if (playerId !== gameState.hostPlayerId) return;
+      resetGame();
+      gameState.phase = 'lobby';
+      broadcastHostState();
+      broadcastAllPlayers();
+      return;
+    case 'submit-word':
+      if (gameState.phase !== 'playing') return;
+      handleWordSubmission(playerId, sanitize(action.word || '').toLowerCase().trim());
+      return;
+    case 'submit-path':
+      if (gameState.phase !== 'playing' || !Array.isArray(action.path)) return;
+      handlePathSubmission(playerId, action.path);
+      return;
+  }
+}
+
+function renderWithState(nextState) {
+  state = nextState;
+  render();
+}
+
+function encodeSignal(payload) {
+  return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+}
+
+function decodeSignal(raw) {
+  return JSON.parse(decodeURIComponent(escape(atob(String(raw || '').trim()))));
+}
+
+function createManualControls() {
+  const joinEl = document.getElementById('join-url');
+  if (!joinEl) return;
+  joinEl.textContent = 'Serverless WebRTC mode: use offer/answer codes to connect players.';
+
+  const wrap = document.createElement('div');
+  wrap.style.marginTop = '1rem';
+  wrap.style.display = 'flex';
+  wrap.style.gap = '0.75rem';
+  wrap.style.justifyContent = 'center';
+  wrap.style.flexWrap = 'wrap';
+
+  const createBtn = document.createElement('button');
+  createBtn.textContent = 'Create Player Offer';
+  createBtn.className = 'btn';
+  createBtn.type = 'button';
+
+  const applyBtn = document.createElement('button');
+  applyBtn.textContent = 'Apply Player Answer';
+  applyBtn.className = 'btn';
+  applyBtn.type = 'button';
+
+  createBtn.addEventListener('click', async () => {
+    const connectionId = Math.random().toString(36).slice(2, 8).toUpperCase();
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+
+    let channel = null;
+    const pendingCandidates = [];
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        pendingCandidates.push(event.candidate);
+      }
+    };
+
+    pc.ondatachannel = (event) => {
+      channel = event.channel;
+      channel.onopen = () => {
+        channel.send(JSON.stringify({ type: 'host-hello', connectionId }));
+      };
+
+      channel.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === 'player-join') {
+            const name = sanitize(msg.name || 'Player').substring(0, 20);
+            const avatar = sanitizeAvatar(msg.avatar || {});
+            const deviceId = sanitize(msg.deviceId || '').substring(0, 64);
+            const existing = [...gameState.players.values()].find((p) => p.deviceId && deviceId && p.deviceId === deviceId);
+
+            let playerId;
+            if (existing) {
+              playerId = existing.id;
+              existing.connected = true;
+            } else {
+              playerId = String(nextPlayerId++);
+              gameState.players.set(playerId, {
+                id: playerId,
+                name,
+                avatar,
+                deviceId,
+                totalScore: 0,
+                roundScores: [],
+                roundWins: 0,
+                connected: true,
+              });
+              if (!gameState.hostPlayerId) {
+                gameState.hostPlayerId = playerId;
+              }
+            }
+
+            const peer = rtcPeers.get(connectionId);
+            if (peer) {
+              peer.playerId = playerId;
+            }
+
+            if (channel && channel.readyState === 'open') {
+              channel.send(JSON.stringify({
+                type: 'joined',
+                playerId,
+                data: getPlayerState(playerId),
+                profile: null,
+              }));
+            }
+
+            broadcastHostState();
+            broadcastPlayerList();
+            broadcastAllPlayers();
+            return;
+          }
+
+          if (msg.type === 'client-action' && msg.payload) {
+            const peer = rtcPeers.get(connectionId);
+            handlePlayerAction(peer ? peer.playerId : null, msg.payload);
+            return;
+          }
+        } catch {
+          // ignore malformed messages
+        }
+      };
+
+      channel.onclose = () => {
+        const peer = rtcPeers.get(connectionId);
+        if (peer && peer.playerId && gameState.players.has(peer.playerId)) {
+          const p = gameState.players.get(peer.playerId);
+          p.connected = false;
+          broadcastHostState();
+          broadcastPlayerList();
+        }
+        rtcPeers.delete(connectionId);
+      };
+    };
+
+    rtcPeers.set(connectionId, { pc, channel: null, playerId: null });
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    setTimeout(() => {
+      const code = encodeSignal({
+        connectionId,
+        type: 'offer',
+        sdp: pc.localDescription ? pc.localDescription.sdp : offer.sdp,
+        candidates: pendingCandidates,
+      });
+      prompt(`Share this offer code with player (${connectionId})`, code);
+    }, 300);
+  });
+
+  applyBtn.addEventListener('click', async () => {
+    const input = prompt('Paste player answer code');
+    if (!input) return;
+
+    let decoded;
+    try {
+      decoded = decodeSignal(input);
     } catch {
-      console.log('[rtc][host] channel message from', playerPeerId);
+      alert('Invalid answer code');
+      return;
     }
-  };
-  channel.onclose = () => {
-    console.log('[rtc][host] datachannel closed ->', playerPeerId);
-  };
 
-  pc.onicecandidate = (event) => {
-    if (!event.candidate) return;
-    sendWs({ type: 'rtc-signal', to: playerPeerId, signal: { type: 'candidate', candidate: event.candidate } });
-  };
-
-  pc.onconnectionstatechange = () => {
-    const st = pc.connectionState;
-    if (st === 'failed' || st === 'closed' || st === 'disconnected') {
-      rtcPeers.delete(playerPeerId);
+    const connectionId = decoded.connectionId;
+    const peer = rtcPeers.get(connectionId);
+    if (!peer) {
+      alert(`Unknown connection ${connectionId}`);
+      return;
     }
-  };
 
-  rtcPeers.set(playerPeerId, { pc, channel });
-
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  sendWs({ type: 'rtc-signal', to: playerPeerId, signal: { type: 'offer', sdp: offer.sdp } });
-}
-
-async function handleRtcSignal(msg) {
-  const from = msg.from;
-  const signal = msg.signal || {};
-  if (!from || !signal.type) return;
-
-  const peer = rtcPeers.get(from);
-  if (!peer) {
-    return;
-  }
-
-  if (signal.type === 'answer') {
-    await peer.pc.setRemoteDescription({ type: 'answer', sdp: signal.sdp });
-    return;
-  }
-
-  if (signal.type === 'candidate' && signal.candidate) {
-    try {
-      await peer.pc.addIceCandidate(signal.candidate);
-    } catch (err) {
-      console.warn('[rtc][host] candidate add failed:', err.message);
-    }
-  }
-}
-
-function connectHost() {
-  ws = new WebSocket(`${wsProtocol}://${location.host}${basePath}`);
-
-  ws.onopen = () => {
-    sendWs({ type: 'host-join' });
-    document.getElementById('join-url').textContent = `${location.origin}${basePath}player`;
-
-    if (useRtc) {
-      sendWs({ type: 'rtc-host-open', roomCode: params.get('room') || undefined });
-    }
-  };
-
-  ws.onmessage = async (event) => {
-    const msg = JSON.parse(event.data);
-
-    switch (msg.type) {
-      case 'state':
-        console.log('[host] State received, phase:', msg.data.phase, 'players:', msg.data.players?.length);
-        state = msg.data;
-        render();
-        break;
-      case 'timer':
-        updateTimer(msg.remaining);
-        break;
-      case 'rtc-host-opened': {
-        rtcRoomCode = msg.roomCode;
-        const joinUrl = `${location.origin}${basePath}player?transport=webrtc&room=${encodeURIComponent(rtcRoomCode)}`;
-        document.getElementById('join-url').textContent = joinUrl;
-        console.log('[rtc][host] room open:', rtcRoomCode);
-        break;
+    await peer.pc.setRemoteDescription({ type: 'answer', sdp: decoded.sdp });
+    if (Array.isArray(decoded.candidates)) {
+      for (const candidate of decoded.candidates) {
+        try {
+          await peer.pc.addIceCandidate(candidate);
+        } catch {
+          // ignore candidate failures
+        }
       }
-      case 'rtc-player-joined':
-        await createRtcPeerForPlayer(msg.playerPeerId);
-        break;
-      case 'rtc-signal':
-        await handleRtcSignal(msg);
-        break;
-      case 'rtc-peer-left':
-        if (rtcPeers.has(msg.peerId)) {
-          const peer = rtcPeers.get(msg.peerId);
-          try { peer.pc.close(); } catch {}
-          rtcPeers.delete(msg.peerId);
-        }
-        break;
-      case 'rtc-error':
-        console.warn('[rtc][host] signaling error:', msg.message);
-        break;
-      case 'rtc-forward':
-        if (msg.toPeerId && msg.payload) {
-          forwardToRtcPeer(msg.toPeerId, msg.payload);
-        }
-        break;
     }
-  };
+  });
 
-  ws.onclose = () => {
-    console.log('[host] WebSocket closed, reconnecting in 1.5s...');
-    setTimeout(connectHost, 1500);
-  };
-
-  ws.onerror = (e) => {
-    console.error('[host] WebSocket error:', e);
-  };
+  wrap.appendChild(createBtn);
+  wrap.appendChild(applyBtn);
+  joinEl.parentElement.appendChild(wrap);
 }
 
-connectHost();
-
-// Poll for state every 3 seconds as a backup in case a WS message is missed
-setInterval(() => {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    sendWs({ type: 'get-state' });
+async function initServerlessHost() {
+  const res = await fetch('../csw19.txt');
+  if (!res.ok) {
+    throw new Error(`Failed to load dictionary (${res.status})`);
   }
-}, 3000);
+
+  dictionary = new Dictionary();
+  const text = await res.text();
+  for (const raw of text.split(/\r?\n/)) {
+    dictionary.insert(raw);
+  }
+
+  createManualControls();
+  renderWithState(getHostState());
+}
+
+initServerlessHost().catch((err) => {
+  const joinEl = document.getElementById('join-url');
+  if (joinEl) {
+    joinEl.textContent = `Failed to initialize host: ${err.message}`;
+  }
+  console.error(err);
+});
 
 function render() {
   if (!state) return;
@@ -385,8 +954,6 @@ function animateScoring(phases, onComplete) {
     }
   }, delay);
 }
-
-const UNIQUE_BONUS = 2; // must match server
 
 function floatScore(playerId, text, newTotal) {
   const container = document.getElementById(`float-${playerId}`);
