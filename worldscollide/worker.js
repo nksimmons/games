@@ -52,6 +52,32 @@ async function loadPythonSourceBundle() {
   }
 }
 
+async function loadAssetBundle() {
+  postStatus("Loading asset manifest...");
+  const manifestResponse = await fetch("./asset-manifest.json");
+  if (!manifestResponse.ok) {
+    throw new Error(`Failed to load asset manifest (${manifestResponse.status})`);
+  }
+
+  const manifest = await manifestResponse.json();
+  const files = manifest.files || [];
+
+  for (let i = 0; i < files.length; i += 1) {
+    const rel = files[i];
+    const response = await fetch(`./assets/${rel}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch asset ${rel} (${response.status})`);
+    }
+
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const dest = `/workspace/worldscollide/${rel}`;
+    ensureParentDirs(pyodide.FS, dest);
+    pyodide.FS.writeFile(dest, bytes, { encoding: "binary" });
+  }
+
+  postStatus(`Loaded ${files.length} asset files`);
+}
+
 async function initialize() {
   if (initialized) {
     return;
@@ -67,9 +93,12 @@ async function initialize() {
   }
 
   await loadPythonSourceBundle();
+  await loadAssetBundle();
 
   await pyodide.runPythonAsync(`
+import os
 import sys
+os.chdir("/workspace/worldscollide")
 sys.path.insert(0, "/workspace/worldscollide")
 `);
 
