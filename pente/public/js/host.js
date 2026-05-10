@@ -495,7 +495,7 @@ function esc(str) {
 }
 
 // ── Button wiring ─────────────────────────────────────────────────────
-document.getElementById('host-btn-start').addEventListener('click', () => {
+document.getElementById('host-btn-start')?.addEventListener('click', () => {
   if (gs.players.length < 2) return;
   startGame();
 });
