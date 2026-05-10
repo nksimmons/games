@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Grapple and Go</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ── Setup ── -->
+<div id="screen-setup" class="screen active">
+  <div class="container">
+    <h1>🪝 Grapple and Go</h1>
+    <p class="subtitle">Swing as far as you can! Each player takes a turn. Furthest distance wins.</p>
+
+    <div class="card" style="margin-bottom:1rem">
+      <h3 style="margin:0 0 0.75rem">Add Players</h3>
+      <div style="display:flex;gap:0.75rem">
+        <input id="new-player-name" class="input" type="text" placeholder="Player name" maxlength="16" style="flex:1">
+        <button class="btn btn-success" id="btn-add-player">Add</button>
+      </div>
+      <div id="player-setup-list" style="margin-top:0.75rem;display:flex;flex-direction:column;gap:0.5rem"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:1rem">
+      <h3 style="margin:0 0 0.5rem">How to play</h3>
+      <ul style="margin:0;padding-left:1.25rem;color:var(--text-dim);font-size:0.9rem">
+        <li><strong>Tap</strong> to fire your grapple at a ring above you</li>
+        <li><strong>Tap again</strong> while swinging to let go</li>
+        <li>Collect the <span style="color:#06d6a0">green pickups</span> to get more rope uses</li>
+        <li>You're done when you fall — furthest distance wins!</li>
+      </ul>
+    </div>
+
+    <button class="btn btn-success" id="btn-start-game" disabled style="width:100%;font-size:1.1rem">▶ Start Game</button>
+  </div>
+</div>
+
+<!-- ── Countdown ── -->
+<div id="screen-countdown" class="screen">
+  <div class="center-content">
+    <div id="countdown-who" class="countdown-who"></div>
+    <div id="countdown-num" class="countdown-num">3</div>
+    <div class="countdown-label">Get ready to swing!</div>
+  </div>
+</div>
+
+<!-- ── Running ── -->
+<div id="screen-running" class="screen">
+  <div id="canvas-container">
+    <canvas id="game-canvas"></canvas>
+    <div id="run-player-badge">
+      <span id="run-player-name">Player</span>
+    </div>
+    <div id="tap-hint" class="tap-hint">Tap to grapple!</div>
+  </div>
+</div>
+
+<!-- ── Run Over ── -->
+<div id="screen-runOver" class="screen">
+  <div class="center-content">
+    <div class="run-over-card card">
+      <div class="run-over-emoji">🪝</div>
+      <div id="run-over-name" class="run-over-name"></div>
+      <div class="run-over-label">made it</div>
+      <div id="run-over-dist" class="run-over-dist"></div>
+      <div style="display:flex;gap:1rem;justify-content:center;margin-top:1.5rem">
+        <button class="btn btn-success" id="btn-next-player" style="min-width:160px">Next Player →</button>
+        <button class="btn btn-success" id="btn-see-results" style="min-width:160px;display:none">🏆 See Results</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── All Done ── -->
+<div id="screen-allDone" class="screen">
+  <div class="container" style="max-width:480px">
+    <h1 style="text-align:center;margin-bottom:1.5rem">🏆 Results</h1>
+    <div class="card" style="margin-bottom:1.5rem">
+      <div id="final-scoreboard" style="display:flex;flex-direction:column;gap:0.75rem"></div>
+    </div>
+    <div style="display:flex;gap:1rem">
+      <button class="btn btn-success" id="btn-play-again" style="flex:1">🔄 Same Players</button>
+      <button class="btn" id="btn-new-game" style="flex:1">👥 New Game</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/game.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/combined.js"></script>
+</body>
+</html>
