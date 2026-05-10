@@ -17,12 +17,13 @@
       <div class="card" style="text-align:center">
         <h2>Waiting for players...</h2>
         <div class="qr-area">
-          <p style="margin:1rem 0; color: var(--text-dim)">Players join at:</p>
-          <p class="join-url" id="join-url"></p>
+          <p style="margin:0.75rem 0 0.5rem; color: var(--text-dim)">Scan to join:</p>
+          <img id="qr-img" class="qr-code-img" alt="QR code — waiting for peer ID...">
+          <p class="join-url" id="join-url" style="margin-top:0.5rem"></p>
         </div>
+        <button class="btn btn-primary" id="btn-host-start" disabled style="margin-top:1.25rem">▶ Start Game</button>
       </div>
       <div class="lobby-players" id="lobby-players"></div>
-
     </div>
 
     <!-- PLAYING -->
@@ -58,7 +59,9 @@
             <h2 style="margin-bottom:1rem">Standings</h2>
             <div class="scoreboard" id="standings"></div>
           </div>
-
+          <div style="text-align:center;margin-top:1rem">
+            <button class="btn btn-primary" id="btn-host-next" style="width:100%">Next Round →</button>
+          </div>
         </div>
       </div>
     </div>
@@ -78,12 +81,16 @@
             <h2 style="margin-bottom:1rem">Final Scores</h2>
             <div class="scoreboard" id="final-scores"></div>
           </div>
-
+          <div style="text-align:center;margin-top:1rem">
+            <button class="btn btn-success" id="btn-host-restart" style="width:100%">Play Again</button>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script src="js/host.js"></script>
 </body>
 </html>

@@ -465,8 +465,19 @@ h2 {
   padding: 1rem;
 }
 
+/* QR code image in host lobby */
+.qr-code-img {
+  display: block;
+  width: 200px;
+  height: 200px;
+  margin: 0.5rem auto;
+  border-radius: 8px;
+  background: white;
+  padding: 6px;
+}
+
 .join-url {
-  font-size: 1.5rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--accent3);
   word-break: break-all;

@@ -2,7 +2,8 @@ const basePath = location.pathname.substring(0, location.pathname.lastIndexOf('/
 let state = null;
 let gameState = null;
 let dictionary = null;
-const rtcPeers = new Map(); // connectionId -> { pc, channel, playerId }
+const rtcPeers = new Map(); // connectionId -> { conn, playerId }
+let hostPeer = null;
 let nextPlayerId = 1;
 let timerInterval = null;
 
@@ -264,16 +265,16 @@ function scoreRound(roundWords) {
 function sendToRtcPlayer(playerId, payload) {
   for (const [, peer] of rtcPeers) {
     if (peer.playerId !== playerId) continue;
-    if (!peer.channel || peer.channel.readyState !== 'open') continue;
-    peer.channel.send(JSON.stringify(payload));
+    if (!peer.conn || !peer.conn.open) continue;
+    peer.conn.send(payload);
   }
 }
 
 function broadcastToRtcPlayers(payload) {
   for (const [, peer] of rtcPeers) {
     if (!peer.playerId) continue;
-    if (!peer.channel || peer.channel.readyState !== 'open') continue;
-    peer.channel.send(JSON.stringify(payload));
+    if (!peer.conn || !peer.conn.open) continue;
+    peer.conn.send(payload);
   }
 }
 
@@ -331,6 +332,11 @@ function getPlayerState(playerId) {
     timerEnd: gameState.timerEnd,
     hostPlayerId: gameState.hostPlayerId,
   };
+}
+
+function renderWithState(nextState) {
+  state = nextState;
+  render();
 }
 
 function broadcastHostState() {
@@ -539,203 +545,127 @@ function handlePlayerAction(playerId, action) {
   }
 }
 
-function renderWithState(nextState) {
-  state = nextState;
-  render();
+function buildPlayerUrl(peerId) {
+  const url = new URL('player.html', location.href);
+  url.search = '?room=' + encodeURIComponent(peerId);
+  return url.toString();
 }
 
-function encodeSignal(payload) {
-  return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+async function showQrCode(url) {
+  const img = document.getElementById('qr-img');
+  if (!img || typeof QRCode === 'undefined') return;
+  try {
+    img.src = await QRCode.toDataURL(url, { width: 200, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
+  } catch (e) { console.warn('QR generation failed:', e); }
 }
 
-function decodeSignal(raw) {
-  return JSON.parse(decodeURIComponent(escape(atob(String(raw || '').trim()))));
-}
-
-function createManualControls() {
-  const joinEl = document.getElementById('join-url');
-  if (!joinEl) return;
-  joinEl.textContent = 'Serverless WebRTC mode: use offer/answer codes to connect players.';
-
-  const wrap = document.createElement('div');
-  wrap.style.marginTop = '1rem';
-  wrap.style.display = 'flex';
-  wrap.style.gap = '0.75rem';
-  wrap.style.justifyContent = 'center';
-  wrap.style.flexWrap = 'wrap';
-
-  const createBtn = document.createElement('button');
-  createBtn.textContent = 'Create Player Offer';
-  createBtn.className = 'btn';
-  createBtn.type = 'button';
-
-  const applyBtn = document.createElement('button');
-  applyBtn.textContent = 'Apply Player Answer';
-  applyBtn.className = 'btn';
-  applyBtn.type = 'button';
-
-  createBtn.addEventListener('click', async () => {
-    const connectionId = Math.random().toString(36).slice(2, 8).toUpperCase();
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-
-    let channel = null;
-    const pendingCandidates = [];
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        pendingCandidates.push(event.candidate);
-      }
-    };
-
-    pc.ondatachannel = (event) => {
-      channel = event.channel;
-      channel.onopen = () => {
-        channel.send(JSON.stringify({ type: 'host-hello', connectionId }));
-      };
-
-      channel.onmessage = (evt) => {
-        try {
-          const msg = JSON.parse(evt.data);
-          if (msg.type === 'player-join') {
-            const name = sanitize(msg.name || 'Player').substring(0, 20);
-            const avatar = sanitizeAvatar(msg.avatar || {});
-            const deviceId = sanitize(msg.deviceId || '').substring(0, 64);
-            const existing = [...gameState.players.values()].find((p) => p.deviceId && deviceId && p.deviceId === deviceId);
-
-            let playerId;
-            if (existing) {
-              playerId = existing.id;
-              existing.connected = true;
-            } else {
-              playerId = String(nextPlayerId++);
-              gameState.players.set(playerId, {
-                id: playerId,
-                name,
-                avatar,
-                deviceId,
-                totalScore: 0,
-                roundScores: [],
-                roundWins: 0,
-                connected: true,
-              });
-              if (!gameState.hostPlayerId) {
-                gameState.hostPlayerId = playerId;
-              }
-            }
-
-            const peer = rtcPeers.get(connectionId);
-            if (peer) {
-              peer.playerId = playerId;
-            }
-
-            if (channel && channel.readyState === 'open') {
-              channel.send(JSON.stringify({
-                type: 'joined',
-                playerId,
-                data: getPlayerState(playerId),
-                profile: null,
-              }));
-            }
-
-            broadcastHostState();
-            broadcastPlayerList();
-            broadcastAllPlayers();
-            return;
-          }
-
-          if (msg.type === 'client-action' && msg.payload) {
-            const peer = rtcPeers.get(connectionId);
-            handlePlayerAction(peer ? peer.playerId : null, msg.payload);
-            return;
-          }
-        } catch {
-          // ignore malformed messages
-        }
-      };
-
-      channel.onclose = () => {
-        const peer = rtcPeers.get(connectionId);
-        if (peer && peer.playerId && gameState.players.has(peer.playerId)) {
-          const p = gameState.players.get(peer.playerId);
-          p.connected = false;
-          broadcastHostState();
-          broadcastPlayerList();
-        }
-        rtcPeers.delete(connectionId);
-      };
-    };
-
-    rtcPeers.set(connectionId, { pc, channel: null, playerId: null });
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    setTimeout(() => {
-      const code = encodeSignal({
-        connectionId,
-        type: 'offer',
-        sdp: pc.localDescription ? pc.localDescription.sdp : offer.sdp,
-        candidates: pendingCandidates,
-      });
-      prompt(`Share this offer code with player (${connectionId})`, code);
-    }, 300);
-  });
-
-  applyBtn.addEventListener('click', async () => {
-    const input = prompt('Paste player answer code');
-    if (!input) return;
-
-    let decoded;
-    try {
-      decoded = decodeSignal(input);
-    } catch {
-      alert('Invalid answer code');
-      return;
-    }
-
-    const connectionId = decoded.connectionId;
-    const peer = rtcPeers.get(connectionId);
-    if (!peer) {
-      alert(`Unknown connection ${connectionId}`);
-      return;
-    }
-
-    await peer.pc.setRemoteDescription({ type: 'answer', sdp: decoded.sdp });
-    if (Array.isArray(decoded.candidates)) {
-      for (const candidate of decoded.candidates) {
-        try {
-          await peer.pc.addIceCandidate(candidate);
-        } catch {
-          // ignore candidate failures
-        }
-      }
-    }
-  });
-
-  wrap.appendChild(createBtn);
-  wrap.appendChild(applyBtn);
-  joinEl.parentElement.appendChild(wrap);
-}
-
-async function initServerlessHost() {
-  const res = await fetch('../csw19.txt');
-  if (!res.ok) {
-    throw new Error(`Failed to load dictionary (${res.status})`);
-  }
-
+async function initPeerHost() {
+  // Load dictionary
+  const dictPath = new URL('../csw19.txt', location.href).href;
+  const res = await fetch(dictPath);
+  if (!res.ok) throw new Error(`Failed to load dictionary (${res.status})`);
   dictionary = new Dictionary();
   const text = await res.text();
-  for (const raw of text.split(/\r?\n/)) {
-    dictionary.insert(raw);
-  }
+  for (const raw of text.split(/\r?\n/)) dictionary.insert(raw);
 
-  createManualControls();
+  // Host control buttons (wired up regardless of connection mode)
+  document.getElementById('btn-host-start')?.addEventListener('click', () => {
+    if (!gameState.players.size || (gameState.phase !== 'lobby' && gameState.phase !== 'gameOver')) return;
+    resetGame();
+    startRound();
+  });
+  document.getElementById('btn-host-next')?.addEventListener('click', () => {
+    if (gameState.phase !== 'roundEnd') return;
+    startRound();
+  });
+  document.getElementById('btn-host-restart')?.addEventListener('click', () => {
+    resetGame();
+    gameState.phase = 'lobby';
+    broadcastHostState();
+    broadcastAllPlayers();
+  });
+
+  // PeerJS signaling
+  hostPeer = new Peer();
+
+  hostPeer.on('open', async (id) => {
+    const playerUrl = buildPlayerUrl(id);
+    await showQrCode(playerUrl);
+    const urlEl = document.getElementById('join-url');
+    if (urlEl) urlEl.textContent = playerUrl;
+  });
+
+  hostPeer.on('connection', (conn) => {
+    const connectionId = Math.random().toString(36).slice(2, 8).toUpperCase();
+    rtcPeers.set(connectionId, { conn, playerId: null });
+
+    conn.on('data', (msg) => {
+      if (!msg || typeof msg !== 'object') return;
+
+      if (msg.type === 'player-join') {
+        const name = sanitize(msg.name || 'Player').substring(0, 20);
+        const avatar = sanitizeAvatar(msg.avatar || {});
+        const deviceId = sanitize(msg.deviceId || '').substring(0, 64);
+        const existing = [...gameState.players.values()].find(p => p.deviceId && deviceId && p.deviceId === deviceId);
+        let pid;
+        if (existing) {
+          pid = existing.id;
+          existing.connected = true;
+          rtcPeers.get(connectionId).playerId = pid;
+          conn.send({ type: 'reconnected', playerId: pid, data: getPlayerState(pid) });
+        } else {
+          pid = String(nextPlayerId++);
+          gameState.players.set(pid, { id: pid, name, avatar, deviceId, totalScore: 0, roundScores: [], roundWins: 0, connected: true });
+          if (!gameState.hostPlayerId) gameState.hostPlayerId = pid;
+          rtcPeers.get(connectionId).playerId = pid;
+          conn.send({ type: 'joined', playerId: pid, data: getPlayerState(pid), profile: null });
+        }
+        broadcastHostState();
+        broadcastPlayerList();
+        broadcastAllPlayers();
+        return;
+      }
+
+      if (msg.type === 'reconnect') {
+        const devId = sanitize(msg.deviceId || '').substring(0, 64);
+        const existing = [...gameState.players.values()].find(p => p.deviceId === devId);
+        if (existing) {
+          existing.connected = true;
+          rtcPeers.get(connectionId).playerId = existing.id;
+          conn.send({ type: 'reconnected', playerId: existing.id, data: getPlayerState(existing.id) });
+          broadcastHostState();
+          broadcastPlayerList();
+        } else {
+          conn.send({ type: 'unknown-device' });
+        }
+        return;
+      }
+
+      if (['submit-word', 'submit-path', 'start-game', 'next-round', 'restart'].includes(msg.type)) {
+        const peer = rtcPeers.get(connectionId);
+        handlePlayerAction(peer?.playerId, msg);
+        return;
+      }
+    });
+
+    conn.on('close', () => {
+      const peer = rtcPeers.get(connectionId);
+      if (peer?.playerId && gameState.players.has(peer.playerId)) {
+        gameState.players.get(peer.playerId).connected = false;
+        broadcastHostState();
+        broadcastPlayerList();
+      }
+      rtcPeers.delete(connectionId);
+    });
+  });
+
+  hostPeer.on('error', err => console.error('[PeerJS] error:', err));
   renderWithState(getHostState());
 }
 
-initServerlessHost().catch((err) => {
+initPeerHost().catch(err => {
   const joinEl = document.getElementById('join-url');
-  if (joinEl) {
-    joinEl.textContent = `Failed to initialize host: ${err.message}`;
-  }
+  if (joinEl) joinEl.textContent = `Failed to initialize host: ${err.message}`;
   console.error(err);
 });
 

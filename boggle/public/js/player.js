@@ -1,18 +1,15 @@
 const BG_COLORS = ['#e63946','#457b9d','#2a9d8f','#e9c46a','#f4a261','#264653','#6a4c93','#1982c4','#8ac926','#ff595e','#ff924c','#c77dff'];
 const DRAW_COLORS = ['#ffffff','#ff4444','#ff8800','#ffdd00','#44cc44','#2299ff','#aa44ff','#ff66cc','#88ccff','#aaaaaa'];
-const queryParams = new URLSearchParams(location.search);
-const useRtc = true;
-const offerCodeFromQuery = (queryParams.get('offer') || '').trim();
+const roomParam = new URLSearchParams(location.search).get('room');
 
 let playerId = null;
 let state = null;
 let selectedPath = []; // indices into the 4x4 grid
 let isDragging = false;
 let avatarChoice = { drawing: null, bgColor: BG_COLORS[0] };
-let rtcPc = null;
-let rtcChannel = null;
-let rtcConnectionId = null;
-let localIceCandidates = [];
+let ws = null;
+let playerPeer = null;
+let sendFn = null;
 
 // --- Device Identity (persistent across sessions) ---
 function getDeviceId() {
@@ -237,107 +234,60 @@ function updateAvatarPreview() {
   }
 }
 
-function encodeSignal(payload) {
-  return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-}
+// --- WebSocket Connection ---
+function connectWs() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}`);
 
-function decodeSignal(raw) {
-  return JSON.parse(decodeURIComponent(escape(atob(String(raw || '').trim()))));
-}
-
-function setupRtcChannel(channel) {
-  rtcChannel = channel;
-
-  rtcChannel.onopen = () => {
-    console.log('[rtc][player] datachannel open');
-    rtcChannel.send(JSON.stringify({ type: 'player-ready' }));
+  ws.onopen = () => {
+    sendFn = (msg) => ws.send(JSON.stringify(msg));
+    send({ type: 'reconnect', deviceId });
   };
 
-  rtcChannel.onmessage = async (event) => {
-    try {
-      const msg = JSON.parse(event.data);
-      if (msg.type === 'host-hello') {
-        console.log('[rtc][player] connected to host', msg.connectionId || 'unknown');
-        return;
-      }
-
-      await processServerMessage(msg, 'rtc');
-      return;
-    } catch {
-      // ignore malformed rtc debug messages
-    }
+  ws.onmessage = (event) => {
+    let msg;
+    try { msg = JSON.parse(event.data); } catch { return; }
+    processServerMessage(msg);
   };
 
-  rtcChannel.onclose = () => {
-    console.log('[rtc][player] datachannel closed');
+  ws.onclose = () => {
+    sendFn = null;
+    setTimeout(connectWs, 2000);
   };
 }
 
-function ensureRtcPc() {
-  if (rtcPc) return rtcPc;
+// --- PeerJS Connection (serverless / GitHub Pages) ---
+function connectPeer(hostPeerId) {
+  if (typeof Peer === 'undefined') {
+    console.error('PeerJS not loaded');
+    return;
+  }
+  playerPeer = new Peer();
 
-  rtcPc = new RTCPeerConnection({
-    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+  playerPeer.on('open', () => {
+    const conn = playerPeer.connect(hostPeerId, { reliable: true });
+
+    conn.on('open', () => {
+      sendFn = (msg) => conn.send(msg);
+      send({ type: 'reconnect', deviceId });
+    });
+
+    conn.on('data', (msg) => {
+      if (msg && typeof msg === 'object') processServerMessage(msg);
+    });
+
+    conn.on('close', () => {
+      sendFn = null;
+      setTimeout(() => connectPeer(hostPeerId), 3000);
+    });
   });
 
-  rtcPc.onicecandidate = (event) => {
-    if (!event.candidate) return;
-    localIceCandidates.push(event.candidate);
-  };
-
-  rtcPc.ondatachannel = (event) => {
-    setupRtcChannel(event.channel);
-  };
-
-  return rtcPc;
+  playerPeer.on('error', () => {
+    setTimeout(() => connectPeer(hostPeerId), 3000);
+  });
 }
 
-async function connect() {
-  const offered = offerCodeFromQuery || prompt('Paste host offer code');
-  if (!offered) {
-    console.warn('[rtc][player] no offer code provided');
-    return;
-  }
-
-  let decoded;
-  try {
-    decoded = decodeSignal(offered);
-  } catch {
-    alert('Invalid host offer code');
-    return;
-  }
-
-  rtcConnectionId = decoded.connectionId || null;
-  const pc = ensureRtcPc();
-
-  await pc.setRemoteDescription({ type: 'offer', sdp: decoded.sdp });
-  if (Array.isArray(decoded.candidates)) {
-    for (const candidate of decoded.candidates) {
-      try {
-        await pc.addIceCandidate(candidate);
-      } catch {
-        // ignore candidate failure
-      }
-    }
-  }
-
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
-
-  setTimeout(() => {
-    const code = encodeSignal({
-      connectionId: rtcConnectionId,
-      type: 'answer',
-      sdp: pc.localDescription ? pc.localDescription.sdp : answer.sdp,
-      candidates: localIceCandidates,
-    });
-    prompt('Share this answer code back to host', code);
-  }, 300);
-}
-
-async function processServerMessage(msg, source) {
-  if (source !== 'rtc') return;
-
+async function processServerMessage(msg) {
   switch (msg.type) {
     case 'joined':
       playerId = msg.playerId;
@@ -365,6 +315,9 @@ async function processServerMessage(msg, source) {
       if (state) state.players = msg.players;
       renderPlayerList();
       break;
+    case 'word-counts':
+      if (state) state.playerWordCounts = msg.counts;
+      break;
     case 'timer':
       updateTimer(msg.remaining);
       break;
@@ -375,25 +328,7 @@ async function processServerMessage(msg, source) {
 }
 
 function send(msg) {
-  if (!rtcChannel || rtcChannel.readyState !== 'open') {
-    return;
-  }
-
-  if (msg.type === 'player-join') {
-    rtcChannel.send(JSON.stringify(msg));
-    return;
-  }
-
-  if (
-    msg.type === 'submit-path' ||
-    msg.type === 'submit-word' ||
-    msg.type === 'start-game' ||
-    msg.type === 'next-round' ||
-    msg.type === 'restart'
-  ) {
-    rtcChannel.send(JSON.stringify({ type: 'client-action', payload: msg }));
-    return;
-  }
+  if (sendFn) sendFn(msg);
 }
 
 // --- Render ---
@@ -857,4 +792,8 @@ function esc(str) {
   }
 })();
 initAvatarBuilder();
-connect();
+if (roomParam) {
+  connectPeer(roomParam);
+} else {
+  connectWs();
+}

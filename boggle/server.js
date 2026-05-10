@@ -4,6 +4,7 @@ const { WebSocketServer } = require('ws');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const QRCode = require('qrcode');
 const { loadDictionary } = require('./dictionary');
 const { generateBoard, getScore, getBaseScore, getLengthBonus, UNIQUE_BONUS, findAllWords } = require('./game');
 const { scoreRound } = require('./shared/round-scoring');
@@ -99,8 +100,33 @@ app.get('/player', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'player.html'));
 });
 
+app.get('/combined', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'combined.html'));
+});
+
+app.get('/qr.png', async (_req, res) => {
+  const ip = getLocalIP();
+  const url = `http://${ip}:${PORT}/player`;
+  try {
+    const buf = await QRCode.toBuffer(url, { width: 300, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
+    res.type('image/png').send(buf);
+  } catch (e) {
+    console.error('QR generation failed:', e.message);
+    res.status(500).send('QR generation failed');
+  }
+});
+
+app.get('/api/info', (_req, res) => {
+  const ip = getLocalIP();
+  res.json({
+    playerUrl: `http://${ip}:${PORT}/player`,
+    hostUrl: `http://${ip}:${PORT}/host`,
+    combinedUrl: `http://${ip}:${PORT}/combined`,
+  });
+});
+
 app.get('/', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'player.html'));
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // --- WebSocket heartbeat ---
@@ -630,6 +656,7 @@ function handleWordSubmission(playerId, word) {
 
   sendToPlayer(playerId, { type: 'word-result', word, valid, score, reason: entry.reason });
   broadcastHostState();
+  broadcastWordCounts();
 }
 
 function handlePathSubmission(playerId, pathIndices) {
@@ -707,6 +734,17 @@ function broadcastPlayerList() {
   }
 }
 
+function broadcastWordCounts() {
+  if (gameState.phase !== 'playing') return;
+  const counts = {};
+  for (const [pid, words] of gameState.roundWords) {
+    counts[pid] = words.filter(w => w.valid).length;
+  }
+  for (const [id] of gameState.players) {
+    sendToPlayer(id, { type: 'word-counts', counts });
+  }
+}
+
 function broadcastAllPlayers() {
   for (const [id] of gameState.players) {
     sendToPlayer(id, { type: 'state', data: getPlayerState(id) });
@@ -776,6 +814,10 @@ function getHostState() {
 
 function getPlayerState(playerId) {
   const myWords = gameState.roundWords.get(playerId) || [];
+  const playerWordCounts = {};
+  for (const [pid, words] of gameState.roundWords) {
+    playerWordCounts[pid] = words.filter(w => w.valid).length;
+  }
   return {
     phase: gameState.phase,
     board: gameState.board,
@@ -785,6 +827,7 @@ function getPlayerState(playerId) {
     players: getPlayerList().sort((a, b) => b.totalScore - a.totalScore),
     timerEnd: gameState.timerEnd,
     hostPlayerId: gameState.hostPlayerId,
+    playerWordCounts,
   };
 }
 
@@ -829,7 +872,9 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('🎲 Boggle Party is running!');
   console.log('');
-  console.log(`  TV/Host display:  http://${ip}:${PORT}/host`);
-  console.log(`  Players join at:  http://${ip}:${PORT}`);
+  console.log(`  Landing page:     http://${ip}:${PORT}/`);
+  console.log(`  Dedicated host:   http://${ip}:${PORT}/host`);
+  console.log(`  Phone (combined): http://${ip}:${PORT}/combined`);
+  console.log(`  Players join at:  http://${ip}:${PORT}/player`);
   console.log('');
 });
