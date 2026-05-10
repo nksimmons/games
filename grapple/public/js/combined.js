@@ -280,9 +280,23 @@ function esc(str) {
   return el.innerHTML;
 }
 
+function showQrCode(url) {
+  const img = document.getElementById('setup-qr-img');
+  const urlEl = document.getElementById('setup-qr-url');
+  if (urlEl) urlEl.textContent = url;
+  if (!img || typeof qrcode === 'undefined') return;
+  try {
+    const qr = qrcode(0, 'M');
+    qr.addData(url);
+    qr.make();
+    img.src = qr.createDataURL(4, 4);
+  } catch (e) { console.warn('QR generation failed:', e); }
+}
+
 // ── Init ────────────────────────────────────────────────────────────────
 initCanvas();
 setupCanvasInput();
 setupAddPlayer();
 setupButtons();
 renderScreen();
+showQrCode(window.location.href);

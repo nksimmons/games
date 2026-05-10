@@ -34,6 +34,12 @@
     </div>
 
     <button class="btn btn-success" id="btn-start-game" disabled style="width:100%;font-size:1.1rem">▶ Start Game</button>
+
+    <div class="combined-qr">
+      <p class="qr-label">Scan to open on another device:</p>
+      <img id="setup-qr-img" class="qr-code-img" alt="QR code">
+      <p class="qr-url" id="setup-qr-url"></p>
+    </div>
   </div>
 </div>
 
@@ -87,6 +93,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script src="js/game.js"></script>
 <script src="js/renderer.js"></script>
 <script src="js/combined.js"></script>
