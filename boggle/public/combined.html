@@ -6,6 +6,25 @@
   <title>Boggle Party – Host &amp; Play</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
+    /* ── Light theme (matching games/index.html) ── */
+    :root {
+      --bg: #f6f4ee;
+      --bg-card: #fffdf8;
+      --bg-surface: #ede9e0;
+      --text: #0b1220;
+      --text-dim: #64748b;
+      --accent: #c1121f;
+      --accent2: #b45309;
+      --accent3: #0e7490;
+      --success: #059669;
+      --danger: #dc2626;
+      --tile-bg: #e8e0d0;
+      --tile-border: #c5bba8;
+      --tile-selected: #c1121f;
+    }
+    .card { border: 1px solid #cbd5e1; box-shadow: 0 2px 8px rgba(15,23,42,0.06); }
+    h2 { color: #0b1220; }
+
     body { overscroll-behavior: none; }
     .player-layout { max-width: 600px; margin: 0 auto; padding: 0.25rem; }
     .top-bar { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; }
@@ -20,7 +39,7 @@
     #draw-canvas {
       border: 3px solid var(--tile-border);
       border-radius: 12px;
-      background: #1a1a2e;
+      background: #f0ece4;
       touch-action: none;
       cursor: crosshair;
       width: 200px;
@@ -31,10 +50,10 @@
     .draw-color {
       width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; cursor: pointer;
     }
-    .draw-color.selected { border-color: white; box-shadow: 0 0 6px rgba(255,255,255,0.5); }
+    .draw-color.selected { border-color: #0b1220; box-shadow: 0 0 6px rgba(0,0,0,0.35); }
     .draw-actions { display: flex; gap: 0.25rem; }
     .btn-tool {
-      background: var(--card-bg); border: 1px solid var(--tile-border); color: #eee;
+      background: var(--bg-surface); border: 1px solid var(--tile-border); color: var(--text);
       border-radius: 6px; padding: 0.25rem 0.5rem; font-size: 1rem; cursor: pointer;
     }
     .btn-tool:active { background: var(--tile-border); }
