@@ -27,12 +27,16 @@ let undoRequest = null;
 let selfPlayerId = null; // player 1 (us)
 
 function resetGs() {
+  const prevBotLevel = gs ? gs.botChallengeLevel : 2;
+  const selfPlayer = gs ? gs.players.find(p => p.id === selfPlayerId) : null;
   const kept = gs ? gs.players.filter(p => !p.isBot && p.id !== selfPlayerId) : [];
   gs = {
     phase: 'lobby', board: createBoard(), players: [], currentTurnIndex: 0,
     moveNumber: 0, lastMove: null, lastCaptures: [], winner: null,
-    hostPlayerId: null, botChallengeLevel: 2,
+    hostPlayerId: selfPlayerId || null, botChallengeLevel: prevBotLevel,
   };
+  // Re-add self as player 1
+  if (selfPlayer) gs.players.push({ ...selfPlayer, captures: 0, stoneNumber: 1 });
   // Re-add remote players that were connected
   for (const p of kept) {
     gs.players.push({ ...p, captures: 0, stoneNumber: gs.players.length + 1 });
@@ -81,12 +85,8 @@ function broadcastAll() {
     if (conn.open) conn.send({ type: 'state', data: playerView(pid) });
   }
   // Update self
-  if (selfPlayerId) {
-    selfState = playerView(selfPlayerId);
-    renderPlaying();
-  } else {
-    renderScreen();
-  }
+  selfState = selfPlayerId ? playerView(selfPlayerId) : null;
+  renderScreen();
 }
 
 function pidFromConn(conn) {
@@ -277,7 +277,7 @@ function handlePlaceStone(conn, msg) {
   if (gs.phase !== 'playing') { conn.send({ type: 'move-result', valid: false, reason: 'Not playing.' }); return; }
   const cur = gs.players[gs.currentTurnIndex];
   if (!cur || cur.id !== pid) { conn.send({ type: 'move-result', valid: false, reason: 'Not your turn.' }); return; }
-  if (!isValidMove(gs.board, msg.row, msg.col)) { conn.send({ type: 'move-result', valid: false, reason: 'Invalid move.' }); return; }
+  if (!isValidMove(gs.board, msg.row, msg.col).valid) { conn.send({ type: 'move-result', valid: false, reason: 'Invalid move.' }); return; }
   conn.send({ type: 'move-result', valid: true });
   applyMove(msg.row, msg.col, cur);
 }
@@ -285,12 +285,10 @@ function handlePlaceStone(conn, msg) {
 function applyMove(row, col, player) {
   undoSnapshot = { board: gs.board.map(r => [...r]), captures: gs.players.map(p => p.captures), turnIndex: gs.currentTurnIndex, moveNumber: gs.moveNumber, lastMove: gs.lastMove, lastCaptures: gs.lastCaptures };
   undoRequest = null;
-  gs.board = placeStone(gs.board, row, col, player.stoneNumber);
+  const caps = placeStone(gs.board, row, col, player.stoneNumber);
   gs.lastMove = { row, col };
-  const caps = checkCaptures(gs.board, row, col, player.stoneNumber);
   gs.lastCaptures = caps;
-  player.captures += caps.length;
-  gs.board = caps.reduce((b, c) => { const nb = b.map(r=>[...r]); nb[c[0]][c[1]] = 0; nb[c[2]][c[3]] = 0; return nb; }, gs.board);
+  player.captures += caps.length / 2;
   gs.moveNumber++;
   const win = checkWin(gs.board, row, col, player.stoneNumber, player.captures);
   if (win) {
@@ -316,7 +314,7 @@ function scheduleBot() {
 function runBotMove() {
   if (gs.phase !== 'playing') return;
   const cur = gs.players[gs.currentTurnIndex]; if (!cur || !cur.isBot) return;
-  const allStones = gs.players.filter(p => !p.isBot).map(p => p.stoneNumber);
+  const allStones = gs.players.map(p => p.stoneNumber);
   const caps = Object.fromEntries(gs.players.map(p => [p.stoneNumber, p.captures]));
   const move = getBotMove(gs.board, cur.stoneNumber, allStones, caps, gs.moveNumber, gs.players.length, gs.botChallengeLevel);
   if (move) applyMove(move.row, move.col, cur);
@@ -466,7 +464,7 @@ function setupBoardInteraction() {
     if (!cur || cur.id !== selfPlayerId) return;
     const row = previewPos.row, col = previewPos.col;
     previewPos = null; document.getElementById('btn-confirm').disabled = true;
-    if (!isValidMove(gs.board, row, col)) { toast('Invalid move', 'error'); return; }
+    if (!isValidMove(gs.board, row, col).valid) { toast('Invalid move', 'error'); return; }
     lastMoveWasMine = true;
     applyMove(row, col, cur);
     selfState = playerView(selfPlayerId);
