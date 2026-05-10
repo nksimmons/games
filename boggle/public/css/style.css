@@ -203,17 +203,68 @@ h2 {
 
 /* ========== WORD COUNT BAR (player) ========== */
 .word-count-bar {
-  text-align: center;
-  font-size: 1rem;
-  color: var(--text-dim);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
   padding: 0.5rem 0;
-  font-weight: 600;
 }
 
-.word-count-bar span {
-  font-size: 1.4rem;
+.count-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--bg-surface);
+  border-radius: 20px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.count-chip.me {
+  background: var(--accent3);
+  color: white;
+}
+
+.mini-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.count-label {
+  max-width: 55px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.count-num {
   font-weight: 900;
-  color: var(--accent3);
+  font-size: 1rem;
+}
+
+/* Round winner banner */
+.round-winner-card {
+  text-align: center;
+  padding: 0.75rem 1.25rem;
+  background: linear-gradient(135deg, #ffd700 0%, #ffb300 100%);
+  color: #5a3a00;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 1.1rem;
+  margin-bottom: 1rem;
+}
+
+.round-winner-card.is-me {
+  animation: winnerPulse 0.6s ease-out;
+}
+
+@keyframes winnerPulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.08); }
+  100% { transform: scale(1); }
 }
 
 /* ========== AVATAR ========== */

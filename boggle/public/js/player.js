@@ -363,13 +363,18 @@ function renderPlaying() {
   document.getElementById('round-num').textContent = state.round;
   document.getElementById('max-rounds').textContent = state.maxRounds;
 
-  const me = state.players.find(p => p.id === playerId);
-  document.getElementById('my-total-score').textContent = me ? me.totalScore : 0;
-
-  // Update word count
-  const validCount = state.myWords ? state.myWords.filter(w => w.valid).length : 0;
-  const countEl = document.getElementById('my-word-count');
-  if (countEl) countEl.textContent = validCount;
+  // Render word counts for all players
+  const countsEl = document.getElementById('word-count-bar');
+  if (countsEl && state.players) {
+    const myValidCount = state.myWords ? state.myWords.filter(w => w.valid).length : 0;
+    countsEl.innerHTML = state.players.map(p => {
+      const count = state.playerWordCounts != null
+        ? (state.playerWordCounts[p.id] ?? 0)
+        : (p.id === playerId ? myValidCount : 0);
+      const isMe = p.id === playerId;
+      return `<div class="count-chip${isMe ? ' me' : ''}"><div class="mini-avatar" style="background:${p.avatar.bgColor || '#4a3a6e'}"></div><span class="count-label">${esc(p.name.split(' ')[0])}</span><span class="count-num">${count}</span></div>`;
+    }).join('');
+  }
 
   renderBoard();
   renderMyWords();
@@ -439,6 +444,21 @@ function renderMyWords() {
 function renderRoundEnd() {
   document.getElementById('round-end-num').textContent = state.round;
   updateHostControls();
+
+  // Round winner banner
+  const winnerBanner = document.getElementById('round-winner-banner');
+  if (winnerBanner) {
+    if (state.lastRoundWinnerId) {
+      const winner = state.players.find(p => p.id === state.lastRoundWinnerId);
+      if (winner) {
+        const isMe = winner.id === playerId;
+        winnerBanner.innerHTML = `<div class="round-winner-card${isMe ? ' is-me' : ''}">👑 ${isMe ? 'You won this round!' : `${esc(winner.name)} wins this round!`}</div>`;
+        winnerBanner.style.display = '';
+      }
+    } else {
+      winnerBanner.style.display = 'none';
+    }
+  }
 
   const container = document.getElementById('round-end-words');
   const words = state.myWords || [];

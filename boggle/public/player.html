@@ -86,10 +86,7 @@
     <!-- PLAYING -->
     <div id="screen-playing" class="screen">
       <div class="top-bar">
-        <div>
-          <span style="color:var(--text-dim);font-size:0.85rem">Round <span id="round-num">1</span>/<span id="max-rounds">5</span></span>
-          <div class="my-score">Score: <span id="my-total-score">0</span></div>
-        </div>
+        <span style="color:var(--text-dim);font-size:0.85rem">Round <span id="round-num">1</span>/<span id="max-rounds">5</span></span>
         <div class="timer" id="timer">90</div>
       </div>
 
@@ -97,9 +94,7 @@
 
       <div class="board" id="board"></div>
 
-      <div class="word-count-bar">
-        <span id="my-word-count">0</span> words found
-      </div>
+      <div class="word-count-bar" id="word-count-bar"></div>
 
 
 
@@ -111,6 +106,7 @@
       <div style="text-align:center;padding:1rem 0">
         <h2>Round <span id="round-end-num">1</span> Complete!</h2>
       </div>
+      <div id="round-winner-banner" style="display:none"></div>
       <div id="round-end-words" class="card"></div>
       <div id="round-end-scores" class="card" style="margin-top:1rem">
         <h2 style="margin-bottom:0.5rem">Standings</h2>

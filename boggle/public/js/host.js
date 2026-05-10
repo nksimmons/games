@@ -322,6 +322,10 @@ function getHostState() {
 
 function getPlayerState(playerId) {
   const myWords = gameState.roundWords.get(playerId) || [];
+  const playerWordCounts = {};
+  for (const [pid, words] of gameState.roundWords) {
+    playerWordCounts[pid] = words.filter(w => w.valid).length;
+  }
   return {
     phase: gameState.phase,
     board: gameState.board,
@@ -331,6 +335,8 @@ function getPlayerState(playerId) {
     players: getPlayerList().sort((a, b) => b.totalScore - a.totalScore),
     timerEnd: gameState.timerEnd,
     hostPlayerId: gameState.hostPlayerId,
+    playerWordCounts,
+    lastRoundWinnerId: gameState.lastRoundWinnerId || null,
   };
 }
 
@@ -450,6 +456,9 @@ function endRound() {
   if (winnerId) {
     const winner = gameState.players.get(winnerId);
     if (winner) winner.roundWins++;
+    gameState.lastRoundWinnerId = winnerId;
+  } else {
+    gameState.lastRoundWinnerId = null;
   }
 
   broadcastHostState();
