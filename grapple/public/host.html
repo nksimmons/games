@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grapple and Go — Host</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* Host-specific layout */
+    .host-run-layout { display: flex; width: 100%; height: 100%; overflow: hidden; }
+    .host-sidebar { width: 210px; flex-shrink: 0; padding: 0.75rem; display: flex; flex-direction: column; gap: 0.75rem; overflow-y: auto; }
+    .host-layout { display: flex; gap: 1rem; align-items: flex-start; }
+    .host-main { flex: 1; min-width: 0; }
+    .qr-section { text-align: center; }
+    .qr-section img { max-width: 140px; border-radius: 8px; }
+    .lobby-player-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.5rem; border-radius: 8px; }
+    .lobby-player-row + .lobby-player-row { border-top: 1px solid var(--tile-border); }
+    .host-badge { font-size: 0.7rem; background: var(--success); color: #fff; border-radius: 4px; padding: 0.1rem 0.35rem; font-weight: 700; }
+    .run-player-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.25rem; border-radius: 6px; font-size: 0.9rem; }
+    .run-player-row.current { background: rgba(5,150,105,0.12); font-weight: 700; }
+    .run-player-row + .run-player-row { border-top: 1px solid var(--tile-border); }
+    .run-player-dist { margin-left: auto; color: var(--success); font-weight: 700; font-size: 0.95rem; }
+    #run-player-list { display: flex; flex-direction: column; gap: 0; }
+    .sidebar-label { font-size: 0.75rem; color: var(--text-dim); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+    .run-phase-badge { font-size: 0.8rem; color: var(--text-dim); text-align: center; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+
+<!-- ── Lobby ── -->
+<div id="screen-lobby" class="screen active">
+  <div class="container" style="max-width:860px">
+    <h1 style="margin-bottom:1.5rem">🪝 Grapple and Go</h1>
+    <div class="host-layout">
+      <div class="host-sidebar" style="width:auto;padding:0">
+        <div class="card qr-section" style="min-width:180px">
+          <h3 style="margin:0 0 0.5rem">Scan to Join</h3>
+          <img id="qr-img" style="display:none" alt="QR Code" class="qr-code-img">
+          <p id="lobby-url" class="qr-url">Connecting…</p>
+        </div>
+      </div>
+      <div class="host-main">
+        <div class="card" style="margin-bottom:1rem">
+          <h3 style="margin:0 0 0.75rem">Players (<span id="lobby-count">0</span>)</h3>
+          <div id="lobby-player-list">
+            <p style="color:var(--text-dim);font-size:0.9rem">Waiting for players to scan the QR code…</p>
+          </div>
+        </div>
+        <div class="card" style="font-size:0.9rem;color:var(--text-dim)">
+          <ul style="margin:0;padding-left:1.25rem;line-height:1.8">
+            <li>Players scan the QR code and enter their name to join</li>
+            <li>The first player to join can start the game</li>
+            <li>Each player taps their phone screen to swing</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Countdown ── -->
+<div id="screen-countdown" class="screen">
+  <div class="center-content">
+    <div id="countdown-who" class="countdown-who"></div>
+    <div id="countdown-num" class="countdown-num">3</div>
+    <div class="countdown-label">Get ready to swing!</div>
+  </div>
+</div>
+
+<!-- ── Running ── -->
+<div id="screen-running" class="screen" style="flex-direction:row;overflow:hidden">
+  <aside class="host-sidebar">
+    <div class="card" style="padding:0.75rem;flex:1">
+      <div class="sidebar-label">Players</div>
+      <div id="run-player-list"></div>
+    </div>
+    <div class="run-phase-badge" id="run-phase-badge">Tap your phone!</div>
+  </aside>
+  <div id="canvas-container" style="flex:1;position:relative;overflow:hidden">
+    <canvas id="game-canvas" style="display:block;width:100%;height:100%;touch-action:none"></canvas>
+  </div>
+</div>
+
+<!-- ── Run Over ── -->
+<div id="screen-runOver" class="screen">
+  <div class="center-content">
+    <div class="run-over-card card">
+      <div class="run-over-emoji">🪝</div>
+      <div id="run-over-name" class="run-over-name"></div>
+      <div class="run-over-label">made it</div>
+      <div id="run-over-dist" class="run-over-dist"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── All Done ── -->
+<div id="screen-allDone" class="screen">
+  <div class="container" style="max-width:480px">
+    <h1 style="text-align:center;margin-bottom:1.5rem">🏆 Results</h1>
+    <div class="card" style="margin-bottom:1.5rem">
+      <div id="final-scoreboard" style="display:flex;flex-direction:column;gap:0.75rem"></div>
+    </div>
+    <button class="btn btn-success" id="btn-play-again" style="width:100%;font-size:1.05rem">🔄 Play Again</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="js/game.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/host.js"></script>
+</body>
+</html>

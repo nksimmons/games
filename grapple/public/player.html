@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Grapple and Go — Join</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* Player-specific */
+    .tap-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 100%; height: 220px; margin-top: 1.5rem;
+      border-radius: 20px; border: 3px solid var(--success);
+      background: rgba(5,150,105,0.1); color: var(--success);
+      font-size: 3.5rem; font-weight: 900; cursor: pointer;
+      transition: background 0.08s, transform 0.08s;
+      user-select: none; touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .tap-btn:active { background: rgba(5,150,105,0.25); transform: scale(0.97); }
+    .tap-btn.swinging { border-color: var(--accent); background: rgba(193,18,31,0.1); color: var(--accent); }
+    .run-dist-display {
+      font-size: 4.5rem; font-weight: 900; color: var(--success);
+      line-height: 1; text-align: center; margin: 0.25rem 0 0.5rem;
+    }
+    .rope-pips { display: flex; gap: 6px; justify-content: center; margin-bottom: 0.75rem; }
+    .rope-pip { width: 16px; height: 16px; border-radius: 50%; background: var(--success); }
+    .rope-pip.used { background: var(--tile-border); }
+    .watching-name { font-size: 1.8rem; font-weight: 800; margin: 0.5rem 0; }
+    .watching-dist { font-size: 3rem; font-weight: 900; color: var(--text-dim); }
+    .turn-label { font-size: 0.95rem; color: var(--text-dim); }
+    .run-who-label { font-size: 1rem; color: var(--text-dim); margin-bottom: 0.25rem; }
+    .run-state-hint { font-size: 0.85rem; color: var(--text-dim); margin-top: 0.5rem; }
+    .lobby-waiting { color: var(--text-dim); font-size: 0.95rem; margin-bottom: 1rem; }
+    .runover-dist-player { font-size: 3.5rem; font-weight: 900; color: var(--success); }
+  </style>
+</head>
+<body>
+
+<!-- ── No room ── -->
+<div id="screen-no-room" class="screen">
+  <div class="container">
+    <div class="card" style="text-align:center;padding:2rem;margin-top:2rem">
+      <h2 style="margin-bottom:0.75rem">❌ No Room Found</h2>
+      <p style="color:var(--text-dim)">Scan the QR code from the host screen, or ask for the join link.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── Disconnected ── -->
+<div id="screen-disconnected" class="screen">
+  <div class="container">
+    <div class="card" style="text-align:center;padding:2rem;margin-top:2rem">
+      <h2 style="margin-bottom:0.75rem">🔌 Disconnected</h2>
+      <p style="color:var(--text-dim)">Lost connection to the host. Trying to reconnect…</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── Join ── -->
+<div id="screen-join" class="screen active">
+  <div class="container">
+    <h1 style="margin-bottom:0.25rem">🪝 Grapple and Go</h1>
+    <p class="subtitle">Enter your name to join the game.</p>
+    <div class="card" style="margin-bottom:1rem">
+      <label for="player-name" style="font-size:0.85rem;color:var(--text-dim);display:block;margin-bottom:0.4rem">Your Name</label>
+      <div style="display:flex;gap:0.75rem">
+        <input id="player-name" class="input" type="text" placeholder="Enter your name" maxlength="16" autocomplete="name" style="flex:1">
+        <button class="btn btn-success" id="btn-join" style="min-width:90px">Join →</button>
+      </div>
+      <p id="join-error" style="color:var(--accent);font-size:0.85rem;margin-top:0.4rem;display:none"></p>
+    </div>
+    <div class="card" style="font-size:0.9rem;color:var(--text-dim)">
+      <ul style="margin:0;padding-left:1.25rem;line-height:1.9">
+        <li>Tap your screen to fire your grapple hook</li>
+        <li>Tap again while swinging to release</li>
+        <li>Collect green pickups for extra swings</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── Lobby ── -->
+<div id="screen-lobby" class="screen">
+  <div class="container">
+    <h2 style="margin-bottom:1rem">🪝 Grapple and Go</h2>
+    <p id="lobby-msg" class="lobby-waiting">Waiting for the host to start the game…</p>
+    <button class="btn btn-success" id="btn-start-game" style="display:none;width:100%;font-size:1.05rem;margin-bottom:1rem">▶ Start Game</button>
+    <div class="card">
+      <h3 style="margin:0 0 0.75rem">Players</h3>
+      <div id="player-lobby-list" style="display:flex;flex-direction:column;gap:0.5rem"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Countdown ── -->
+<div id="screen-countdown" class="screen">
+  <div class="center-content">
+    <div id="p-countdown-who" class="countdown-who"></div>
+    <div id="p-countdown-num" class="countdown-num">3</div>
+    <div class="countdown-label">Get ready!</div>
+  </div>
+</div>
+
+<!-- ── Running ── -->
+<div id="screen-running" class="screen">
+  <div class="center-content" style="padding:1.5rem;width:100%">
+
+    <!-- My turn -->
+    <div id="run-my-turn" style="display:none;width:100%;text-align:center">
+      <p class="run-who-label">Your turn!</p>
+      <div id="run-dist-my" class="run-dist-display">0m</div>
+      <div id="run-rope-pips" class="rope-pips"></div>
+      <button id="btn-tap" class="tap-btn">TAP</button>
+      <p id="run-state-hint" class="run-state-hint">Tap to fire your grapple</p>
+    </div>
+
+    <!-- Watching -->
+    <div id="run-watching" style="display:none;width:100%;text-align:center">
+      <p class="turn-label">Watching</p>
+      <div id="run-watching-name" class="watching-name"></div>
+      <div id="run-dist-watch" class="watching-dist">0m</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Run Over ── -->
+<div id="screen-runOver" class="screen">
+  <div class="center-content">
+    <div class="run-over-card card">
+      <div class="run-over-emoji">🪝</div>
+      <div id="p-runover-name" class="run-over-name"></div>
+      <div class="run-over-label">made it</div>
+      <div id="p-runover-dist" class="run-over-dist"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── All Done ── -->
+<div id="screen-allDone" class="screen">
+  <div class="container" style="max-width:480px">
+    <h1 style="text-align:center;margin-bottom:1.5rem">🏆 Results</h1>
+    <div class="card" style="margin-bottom:1.5rem">
+      <div id="p-final-scoreboard" style="display:flex;flex-direction:column;gap:0.75rem"></div>
+    </div>
+    <button class="btn btn-success" id="btn-play-again" style="width:100%;font-size:1.05rem;display:none">🔄 Play Again</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="js/player.js"></script>
+</body>
+</html>
