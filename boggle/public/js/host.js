@@ -551,11 +551,14 @@ function buildPlayerUrl(peerId) {
   return url.toString();
 }
 
-async function showQrCode(url) {
+function showQrCode(url) {
   const img = document.getElementById('qr-img');
-  if (!img || typeof QRCode === 'undefined') return;
+  if (!img || typeof qrcode === 'undefined') return;
   try {
-    img.src = await QRCode.toDataURL(url, { width: 200, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
+    const qr = qrcode(0, 'M');
+    qr.addData(url);
+    qr.make();
+    img.src = qr.createDataURL(4, 4);
   } catch (e) { console.warn('QR generation failed:', e); }
 }
 
@@ -588,9 +591,9 @@ async function initPeerHost() {
   // PeerJS signaling
   hostPeer = new Peer();
 
-  hostPeer.on('open', async (id) => {
+  hostPeer.on('open', (id) => {
     const playerUrl = buildPlayerUrl(id);
-    await showQrCode(playerUrl);
+    showQrCode(playerUrl);
     const urlEl = document.getElementById('join-url');
     if (urlEl) urlEl.textContent = playerUrl;
   });
