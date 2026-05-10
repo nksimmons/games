@@ -1,17 +1,17 @@
 :root {
-  --bg: #1a0a2e;
-  --bg-card: #2a1a4e;
-  --bg-surface: #3a2a5e;
-  --accent: #e63946;
-  --accent2: #f4a261;
-  --accent3: #2ec4b6;
-  --text: #f1faee;
-  --text-dim: #a8b2d1;
-  --success: #06d6a0;
-  --danger: #ef476f;
-  --tile-bg: #4a3a6e;
-  --tile-border: #6a5a8e;
-  --tile-selected: #e63946;
+  --bg: #f6f4ee;
+  --bg-card: #fffdf8;
+  --bg-surface: #ede9e0;
+  --accent: #c1121f;
+  --accent2: #b45309;
+  --accent3: #0e7490;
+  --text: #0b1220;
+  --text-dim: #64748b;
+  --success: #059669;
+  --danger: #dc2626;
+  --tile-bg: #e8e0d0;
+  --tile-border: #c5bba8;
+  --tile-selected: #c1121f;
   --radius: 12px;
 }
 
@@ -139,7 +139,7 @@ h2 {
   background: var(--tile-selected);
   border-color: white;
   transform: scale(1.05);
-  box-shadow: 0 0 20px rgba(230, 57, 70, 0.5);
+  box-shadow: 0 0 20px rgba(193, 18, 31, 0.4);
 }
 
 .tile.adjacent {
@@ -170,7 +170,7 @@ h2 {
 
 .player-card.leader {
   border: 2px solid var(--accent2);
-  box-shadow: 0 0 20px rgba(244, 162, 97, 0.3);
+  box-shadow: 0 0 20px rgba(180, 83, 9, 0.2);
 }
 
 .player-name {
@@ -393,7 +393,7 @@ h2 {
 }
 
 .avatar-option:hover { transform: scale(1.1); }
-.avatar-option.selected { border-color: var(--accent); box-shadow: 0 0 10px rgba(230, 57, 70, 0.5); }
+.avatar-option.selected { border-color: var(--accent); box-shadow: 0 0 10px rgba(193, 18, 31, 0.4); }
 
 .color-option {
   width: 36px;
@@ -405,7 +405,7 @@ h2 {
 }
 
 .color-option:hover { transform: scale(1.15); }
-.color-option.selected { border-color: white; box-shadow: 0 0 10px rgba(255,255,255,0.4); }
+.color-option.selected { border-color: #0b1220; box-shadow: 0 0 10px rgba(0,0,0,0.3); }
 
 /* ========== HOST LAYOUT ========== */
 .host-layout {
@@ -503,7 +503,7 @@ h2 {
   order: 2;
   min-width: 160px;
   padding-bottom: 3rem;
-  background: linear-gradient(180deg, rgba(244, 162, 97, 0.3), var(--bg-surface));
+  background: linear-gradient(180deg, rgba(180, 83, 9, 0.15), var(--bg-surface));
   border: 2px solid var(--accent2);
 }
 
