@@ -74,6 +74,26 @@ function drawWorld(ctx, run, cameraX, canvasWidth, canvasHeight, playerColor) {
     ctx.fill();
   }
 
+  // Aim indicator: dashed line showing fire direction when able to grapple
+  if (run.state === 'falling' && typeof run.aimAngle === 'number' && run.ropeUses > 0) {
+    const ax = run.px - cameraX;
+    const aimLen = Math.min(MAX_ROPE * 0.6, 300);
+    const ex = ax + Math.cos(run.aimAngle) * aimLen;
+    const ey = run.py + Math.sin(run.aimAngle) * aimLen;
+    ctx.beginPath();
+    ctx.moveTo(ax, run.py);
+    ctx.lineTo(ex, ey);
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 6]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(ex, ey, 5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.fill();
+  }
+
   // Player
   const px = run.px - cameraX;
   drawPlayer(ctx, px, run.py, playerColor, run.dead);

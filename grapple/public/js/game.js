@@ -78,7 +78,10 @@ function createRunState(canvasWidth, canvasHeight) {
     grappleY: 0,
     grappleDX: 0,
     grappleDY: 0,
-    grappleTarget: null, // { x, y } of ring we're aiming at
+    grappleTarget: null, // { x, y } of ring we're aiming at (legacy combined mode)
+
+    // Gamepad aim angle (radians, 0=right, -π/2=up)
+    aimAngle: -Math.PI / 3,
 
     // World
     chunks: [],
@@ -104,8 +107,32 @@ function ensureChunks(run, canvasWidth, canvasHeight) {
   }
 }
 
-// ── Input handler ──────────────────────────────────────────────────────
+// ── Input handlers ────────────────────────────────────────────────────
 
+// Gamepad controls: fire in a specific direction angle (radians)
+function handleFireAction(run, angle) {
+  if (run.dead) return;
+  // Detach/cancel any current state so we can re-fire
+  if (run.state === 'swinging') detach(run);
+  if (run.state === 'firing')   run.state = 'falling';
+  if (run.ropeUses <= 0) return;
+  run.ropeUses--;
+  run.state = 'firing';
+  run.grappleX = run.px;
+  run.grappleY = run.py;
+  run.grappleDX = Math.cos(angle) * GRAPPLE_SPEED;
+  run.grappleDY = Math.sin(angle) * GRAPPLE_SPEED;
+  run.grappleTarget = null; // proximity-based: hit whatever ring the hook passes through
+}
+
+// Gamepad controls: release fire button
+function handleReleaseAction(run) {
+  if (run.dead) return;
+  if (run.state === 'swinging') detach(run);
+  if (run.state === 'firing')   run.state = 'falling';
+}
+
+// Legacy tap handler (used by combined.html single-device mode)
 function handleTap(run, tapX, tapY, canvasWidth, canvasHeight, cameraX) {
   // tapX/tapY are canvas (screen) coordinates; convert to world coords
   const worldX = tapX + cameraX;
@@ -268,7 +295,17 @@ function stepFiring(run, canvasWidth, canvasHeight) {
   run.grappleX += run.grappleDX;
   run.grappleY += run.grappleDY;
 
-  // Check if reached target
+  // Check proximity to any ring (gamepad mode: no specific target)
+  const hitR = RING_RADIUS + 8;
+  for (const ring of run.rings) {
+    const dx = run.grappleX - ring.x;
+    const dy = run.grappleY - ring.y;
+    if (Math.sqrt(dx * dx + dy * dy) < hitR) {
+      attachToRing(run, ring);
+      return;
+    }
+  }
+  // Legacy: also check explicit target (combined.html tap mode)
   const t = run.grappleTarget;
   if (t) {
     const dx = run.grappleX - t.x;
@@ -279,7 +316,7 @@ function stepFiring(run, canvasWidth, canvasHeight) {
     }
   }
 
-  // Cancel if grapple goes too far
+  // Cancel if grapple goes too far from player
   const gdx = run.grappleX - run.px;
   const gdy = run.grappleY - run.py;
   if (Math.sqrt(gdx * gdx + gdy * gdy) > MAX_ROPE * 1.2) {

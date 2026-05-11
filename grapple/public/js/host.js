@@ -108,10 +108,13 @@ function buildState() {
 function handleMsg(conn, msg) {
   if (!msg || typeof msg !== 'object') return;
   switch (msg.type) {
-    case 'join':    handleJoin(conn, msg); break;
-    case 'start':   handleStart(conn);    break;
-    case 'tap':     handleTapMsg(conn);   break;
-    case 'restart': handleRestart(conn);  break;
+    case 'join':     handleJoin(conn, msg);     break;
+    case 'start':    handleStart(conn);         break;
+    case 'tap':      handleTapMsg(conn);        break; // legacy combined.html compat
+    case 'aim':      handleAimMsg(conn, msg);   break;
+    case 'fireDown': handleFireDownMsg(conn, msg); break;
+    case 'fireUp':   handleFireUpMsg(conn);     break;
+    case 'restart':  handleRestart(conn);       break;
   }
 }
 
@@ -174,9 +177,38 @@ function handleTapMsg(conn) {
   if (cur?.peerId !== conn.peer) return;
   const run = cur.currentRun;
   if (!run || run.dead) return;
-  // Aim tap toward upper-right: biases grapple toward forward rings
+  // Legacy combined.html tap: aim upper-right to bias grapple forward
   const camX = getCameraX(run, canvasWidth);
   handleTap(run, canvasWidth * 0.8, canvasHeight * 0.15, canvasWidth, canvasHeight, camX);
+}
+
+function handleAimMsg(conn, msg) {
+  if (gs.phase !== 'running') return;
+  const cur = gs.players[gs.currentPlayer];
+  if (cur?.peerId !== conn.peer) return;
+  const run = cur.currentRun;
+  if (!run || run.dead) return;
+  if (typeof msg.angle === 'number') run.aimAngle = msg.angle;
+}
+
+function handleFireDownMsg(conn, msg) {
+  if (gs.phase !== 'running') return;
+  const cur = gs.players[gs.currentPlayer];
+  if (cur?.peerId !== conn.peer) return;
+  const run = cur.currentRun;
+  if (!run || run.dead) return;
+  const angle = typeof msg.angle === 'number' ? msg.angle : (run.aimAngle ?? -Math.PI / 3);
+  run.aimAngle = angle;
+  handleFireAction(run, angle);
+}
+
+function handleFireUpMsg(conn) {
+  if (gs.phase !== 'running') return;
+  const cur = gs.players[gs.currentPlayer];
+  if (cur?.peerId !== conn.peer) return;
+  const run = cur.currentRun;
+  if (!run || run.dead) return;
+  handleReleaseAction(run);
 }
 
 function handleRestart(conn) {

@@ -137,8 +137,8 @@ function renderRunning() {
   const myTurnEl = document.getElementById('run-my-turn');
   const watchEl  = document.getElementById('run-watching');
 
-  if (myTurnEl) myTurnEl.style.display = isMyTurn ? '' : 'none';
-  if (watchEl)  watchEl.style.display  = isMyTurn ? 'none' : '';
+  if (myTurnEl) myTurnEl.style.display = isMyTurn ? 'flex' : 'none';
+  if (watchEl)  watchEl.style.display  = isMyTurn ? 'none' : 'flex';
 
   const run = state.run;
   if (isMyTurn && run) {
@@ -152,20 +152,6 @@ function renderRunning() {
       pipsEl.innerHTML = Array.from({ length: total }, (_, i) =>
         `<div class="rope-pip${i >= run.ropeUses ? ' used' : ''}"></div>`
       ).join('');
-    }
-
-    // Tap button style + hint
-    const tapBtn = document.getElementById('btn-tap');
-    const hint   = document.getElementById('run-state-hint');
-    if (tapBtn) {
-      tapBtn.classList.toggle('swinging', run.runState === 'swinging');
-    }
-    if (hint) {
-      hint.textContent = run.runState === 'swinging'
-        ? 'Tap to release!'
-        : run.runState === 'firing'
-        ? 'Grapple flying…'
-        : 'Tap to fire your grapple!';
     }
   } else if (!isMyTurn) {
     const cur = players[state.currentPlayerIdx];
@@ -218,17 +204,102 @@ function esc(str) {
   return el.innerHTML;
 }
 
-// ── Tap input ─────────────────────────────────────────────────────────
-function setupTapButton() {
-  const btn = document.getElementById('btn-tap');
-  if (!btn) return;
-  btn.addEventListener('click', () => {
-    if (state?.phase !== 'running') return;
-    if (state.currentPlayerIdx !== myIdx) return;
-    send({ type: 'tap' });
-    // Haptic feedback
-    try { navigator.vibrate?.(30); } catch(e) {}
+// ── Gamepad input ─────────────────────────────────────────────────────
+function setupGamepad() {
+  const stickZone = document.getElementById('stick-zone');
+  const track     = document.getElementById('stick-track');
+  const knob      = document.getElementById('stick-knob');
+  const fireBtn   = document.getElementById('fire-btn');
+  if (!stickZone || !fireBtn) return;
+
+  const TRACK_R = 52; // clamping radius (track visual is 130px wide → 65px half)
+  let aimAngle  = -Math.PI / 3; // default: up-right
+  let stickTouchId = null;
+  let lastAimSend  = 0;
+
+  function getTrackCenter() {
+    const r = track.getBoundingClientRect();
+    return { cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+  }
+
+  function updateKnob(clientX, clientY) {
+    const { cx, cy } = getTrackCenter();
+    const dx = clientX - cx;
+    const dy = clientY - cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const clamped = Math.min(dist, TRACK_R);
+    const nx = dist > 0 ? (dx / dist) * clamped : 0;
+    const ny = dist > 0 ? (dy / dist) * clamped : 0;
+    knob.style.transform = `translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`;
+    if (dist > 10) {
+      aimAngle = Math.atan2(dy, dx);
+      // Throttle aim messages to ~20/s
+      const now = Date.now();
+      if (now - lastAimSend > 50) {
+        send({ type: 'aim', angle: aimAngle });
+        lastAimSend = now;
+      }
+    }
+  }
+
+  function resetKnob() {
+    stickTouchId = null;
+    knob.style.transform = 'translate(-50%, -50%)';
+  }
+
+  stickZone.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if (stickTouchId !== null) return;
+    const t = e.changedTouches[0];
+    stickTouchId = t.identifier;
+    updateKnob(t.clientX, t.clientY);
+  }, { passive: false });
+
+  stickZone.addEventListener('touchmove', e => {
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      if (t.identifier === stickTouchId) updateKnob(t.clientX, t.clientY);
+    }
+  }, { passive: false });
+
+  stickZone.addEventListener('touchend', e => {
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      if (t.identifier === stickTouchId) resetKnob();
+    }
+  }, { passive: false });
+
+  stickZone.addEventListener('touchcancel', e => { e.preventDefault(); resetKnob(); }, { passive: false });
+
+  // Mouse fallback for desktop testing
+  let mouseDown = false;
+  stickZone.addEventListener('mousedown', e => {
+    mouseDown = true; updateKnob(e.clientX, e.clientY);
   });
+  window.addEventListener('mousemove', e => {
+    if (mouseDown) updateKnob(e.clientX, e.clientY);
+  });
+  window.addEventListener('mouseup', () => { if (mouseDown) { mouseDown = false; resetKnob(); } });
+
+  // ── Fire button ──
+  function doFireDown() {
+    if (state?.phase !== 'running' || state.currentPlayerIdx !== myIdx) return;
+    send({ type: 'fireDown', angle: aimAngle });
+    try { navigator.vibrate?.(30); } catch(_) {}
+    fireBtn.classList.add('pressed');
+  }
+  function doFireUp() {
+    if (state?.phase !== 'running' || state.currentPlayerIdx !== myIdx) return;
+    send({ type: 'fireUp' });
+    fireBtn.classList.remove('pressed');
+  }
+
+  fireBtn.addEventListener('touchstart',  e => { e.preventDefault(); doFireDown(); }, { passive: false });
+  fireBtn.addEventListener('touchend',    e => { e.preventDefault(); doFireUp();   }, { passive: false });
+  fireBtn.addEventListener('touchcancel', e => { e.preventDefault(); doFireUp();   }, { passive: false });
+  // Mouse fallback
+  fireBtn.addEventListener('mousedown', doFireDown);
+  fireBtn.addEventListener('mouseup',   doFireUp);
 }
 
 // ── Join form ─────────────────────────────────────────────────────────
@@ -266,6 +337,6 @@ function setupButtons() {
 
 // ── Init ──────────────────────────────────────────────────────────────
 setupJoinForm();
-setupTapButton();
+setupGamepad();
 setupButtons();
 connect();
