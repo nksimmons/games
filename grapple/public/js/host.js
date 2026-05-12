@@ -51,13 +51,16 @@ function showQr(url) {
   } catch(e) { console.warn('QR failed:', e); }
 }
 
+// Deployed signaling server (Render free tier) — update after first deploy:
+// https://dashboard.render.com → New Web Service → connect repo → Root Dir: games/signaling
+const SIGNAL_HOST = 'nksimmons-games-signaling.onrender.com';
+
 function makePeerOptions() {
   const h = location.hostname;
   if (h === 'localhost' || h === '127.0.0.1' || h === '') {
-    // file:// or localhost — use the local PeerJS server
     return { host: 'localhost', port: 9000, path: '/peerjs' };
   }
-  return {};
+  return { host: SIGNAL_HOST, secure: true, port: 443, path: '/peerjs' };
 }
 
 let _peerRetries = 0;

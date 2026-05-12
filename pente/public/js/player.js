@@ -3,6 +3,7 @@
 // =====================================================================
 // Connects to a host via PeerJS. Room ID is in the URL: ?room=<peerId>
 // =====================================================================
+const SIGNAL_HOST = 'nksimmons-games-signaling.onrender.com';
 
 const BG_COLORS = ['#e63946','#457b9d','#2a9d8f','#e9c46a','#f4a261','#264653','#6a4c93','#1982c4','#8ac926','#ff595e','#ff924c','#c77dff'];
 const DRAW_COLORS = ['#111111','#ff4444','#ff8800','#ffdd00','#44cc44','#2299ff','#aa44ff','#ff66cc','#88ccff','#888888','#ffffff'];
@@ -172,8 +173,10 @@ function connect() {
   const roomId = new URLSearchParams(location.search).get('room');
   if (!roomId) { showScreenById('screen-no-room'); return; }
 
-  const peerOpts = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '')
-    ? { host: 'localhost', port: 9000, path: '/peerjs' } : {};
+  const h = location.hostname;
+  const peerOpts = (h === 'localhost' || h === '127.0.0.1' || h === '')
+    ? { host: 'localhost', port: 9000, path: '/peerjs' }
+    : { host: SIGNAL_HOST, secure: true, port: 443, path: '/peerjs' };
   peer = new Peer(undefined, peerOpts);
   peer.on('open', () => {
     conn = peer.connect(roomId, { reliable: true });

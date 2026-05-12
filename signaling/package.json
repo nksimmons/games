@@ -1,0 +1,16 @@
+{
+  "name": "games-signaling",
+  "version": "1.0.0",
+  "description": "PeerJS signaling server for nksimmons.github.io games",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.0",
+    "peer": "^1.0.2"
+  }
+}

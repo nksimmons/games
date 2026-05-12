@@ -3,6 +3,7 @@
 // =====================================================================
 // Connects to the host via PeerJS. Room ID from URL: ?room=<peerId>
 // The first player to join is the "host player" and can start the game.
+const SIGNAL_HOST = 'nksimmons-games-signaling.onrender.com';
 // =====================================================================
 
 let peer = null;
@@ -33,8 +34,10 @@ function connect() {
   const roomId = params.get('room');
   if (!roomId) { showScreen('no-room'); return; }
 
-  const peerOpts = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-    ? { host: 'localhost', port: 9000, path: '/peerjs' } : {};
+  const h = location.hostname;
+  const peerOpts = (h === 'localhost' || h === '127.0.0.1' || h === '')
+    ? { host: 'localhost', port: 9000, path: '/peerjs' }
+    : { host: SIGNAL_HOST, secure: true, port: 443, path: '/peerjs' };
   peer = new Peer(undefined, peerOpts);
   peer.on('open', () => {
     conn = peer.connect(roomId, { reliable: true });

@@ -58,12 +58,14 @@ let myPeerId = null;
 let _peerRetries = 0;
 let _peerConnectTimer = null;
 
+const SIGNAL_HOST = 'nksimmons-games-signaling.onrender.com';
+
 function makePeerOptions() {
   const h = location.hostname;
   if (h === 'localhost' || h === '127.0.0.1' || h === '') {
     return { host: 'localhost', port: 9000, path: '/peerjs' };
   }
-  return {};
+  return { host: SIGNAL_HOST, secure: true, port: 443, path: '/peerjs' };
 }
 
 function initHost() {
