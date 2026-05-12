@@ -51,8 +51,15 @@ function showQr(url) {
   } catch(e) { console.warn('QR failed:', e); }
 }
 
+function makePeerOptions() {
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    return { host: 'localhost', port: 9000, path: '/peerjs' };
+  }
+  return {};
+}
+
 function initPeer() {
-  peer = new Peer();
+  peer = new Peer(undefined, makePeerOptions());
   peer.on('open', id => {
     const url = buildPlayerUrl(id);
     const el = document.getElementById('lobby-url');
