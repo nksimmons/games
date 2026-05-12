@@ -99,7 +99,8 @@ function buildState() {
     run: curRun ? {
       ropeUses: curRun.ropeUses,
       dist: Math.round(curRun.maxX / 10),
-      runState: curRun.state,
+      runState: curRun.state,         // 'falling' | 'firing' | 'reeling'
+      retracting: curRun.retracting,
     } : null,
   };
 }

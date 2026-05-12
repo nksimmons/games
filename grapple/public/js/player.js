@@ -153,6 +153,12 @@ function renderRunning() {
         `<div class="rope-pip${i >= run.ropeUses ? ' used' : ''}"></div>`
       ).join('');
     }
+
+    // FIRE button visual: lit up while reeling in
+    const fireBtn = document.getElementById('fire-btn');
+    if (fireBtn) {
+      fireBtn.classList.toggle('pressed', run.retracting === true);
+    }
   } else if (!isMyTurn) {
     const cur = players[state.currentPlayerIdx];
     const nameEl = document.getElementById('run-watching-name');
