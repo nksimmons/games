@@ -172,7 +172,9 @@ function connect() {
   const roomId = new URLSearchParams(location.search).get('room');
   if (!roomId) { showScreenById('screen-no-room'); return; }
 
-  peer = new Peer();
+  const peerOpts = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '')
+    ? { host: 'localhost', port: 9000, path: '/peerjs' } : {};
+  peer = new Peer(undefined, peerOpts);
   peer.on('open', () => {
     conn = peer.connect(roomId, { reliable: true });
     conn.on('open', () => {

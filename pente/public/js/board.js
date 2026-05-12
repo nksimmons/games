@@ -1,5 +1,5 @@
 // Shared Pente board renderer
-const BOARD_SIZE = 19;
+// BOARD_SIZE is declared in game.js which is loaded first
 const STONE_COLORS = [null, '#e0e0e0', '#1a1a1a', '#3b82f6', '#ef4444'];
 const STONE_HIGHLIGHTS = [null, '#333', '#fff', '#fff', '#fff'];
 const STAR_POINTS = [3, 9, 15];

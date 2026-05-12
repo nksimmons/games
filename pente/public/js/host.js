@@ -55,13 +55,37 @@ function resetGs() {
 // ── PeerJS setup ─────────────────────────────────────────────────────
 let peer = null;
 let myPeerId = null;
+let _peerRetries = 0;
+let _peerConnectTimer = null;
+
+function makePeerOptions() {
+  const h = location.hostname;
+  if (h === 'localhost' || h === '127.0.0.1' || h === '') {
+    return { host: 'localhost', port: 9000, path: '/peerjs' };
+  }
+  return {};
+}
 
 function initHost() {
-  peer = new Peer();
+  if (peer) { try { peer.destroy(); } catch(e) {} peer = null; }
+
+  const joinUrlEl = document.getElementById('join-url');
+  if (joinUrlEl && !String(joinUrlEl.textContent).startsWith('http')) {
+    joinUrlEl.textContent = _peerRetries > 0 ? `Retrying… (${_peerRetries})` : 'Connecting…';
+  }
+
+  clearTimeout(_peerConnectTimer);
+  _peerConnectTimer = setTimeout(() => {
+    if (!peer || !peer.id) { _peerRetries++; initHost(); }
+  }, 8000);
+
+  peer = new Peer(undefined, makePeerOptions());
   peer.on('open', (id) => {
+    clearTimeout(_peerConnectTimer);
+    _peerRetries = 0;
     myPeerId = id;
     const url = buildPlayerUrl(id);
-    document.getElementById('join-url').textContent = url;
+    if (joinUrlEl) joinUrlEl.textContent = url;
     showQrCode(url);
   });
   peer.on('connection', (conn) => {
@@ -69,10 +93,15 @@ function initHost() {
     conn.on('error', () => {});
   });
   peer.on('error', (err) => {
-    console.error('PeerJS error:', err);
-    setTimeout(initHost, 3000);
+    clearTimeout(_peerConnectTimer);
+    const delay = Math.min(2000 * Math.pow(1.5, _peerRetries), 15000);
+    _peerRetries++;
+    if (joinUrlEl && !String(joinUrlEl.textContent).startsWith('http')) {
+      joinUrlEl.textContent = `Connection failed — retrying in ${Math.round(delay/1000)}s…`;
+    }
+    setTimeout(initHost, delay);
   });
-  peer.on('disconnected', () => peer.reconnect());
+  peer.on('disconnected', () => { try { peer.reconnect(); } catch(e) {} });
 }
 
 function handleNewConnection(conn) {
@@ -499,12 +528,12 @@ document.getElementById('host-btn-start')?.addEventListener('click', () => {
   if (gs.players.length < 2) return;
   startGame();
 });
-document.getElementById('host-btn-restart').addEventListener('click', resetGs);
-document.getElementById('host-btn-end').addEventListener('click', () => {
+document.getElementById('host-btn-restart')?.addEventListener('click', resetGs);
+document.getElementById('host-btn-end')?.addEventListener('click', () => {
   if (!confirm('End the game and return to lobby?')) return;
   resetGs();
 });
-document.getElementById('host-btn-add-bot').addEventListener('click', () => {
+document.getElementById('host-btn-add-bot')?.addEventListener('click', () => {
   if (gs.phase !== 'lobby' || gs.players.length >= 4) return;
   addBot();
 });
@@ -520,12 +549,12 @@ function addBot() {
   if (!gs.hostPlayerId && gs.players.length > 0) gs.hostPlayerId = gs.players[0].id;
   broadcastAll();
 }
-document.getElementById('host-btn-remove-bot').addEventListener('click', () => {
+document.getElementById('host-btn-remove-bot')?.addEventListener('click', () => {
   const idx = [...gs.players].reverse().findIndex(p => p.isBot);
   if (idx >= 0) gs.players.splice(gs.players.length - 1 - idx, 1);
   broadcastAll();
 });
-document.getElementById('host-bot-level').addEventListener('change', (e) => {
+document.getElementById('host-bot-level')?.addEventListener('change', (e) => {
   const level = Number(e.target.value);
   if (level >= 1 && level <= 4) { gs.botChallengeLevel = level; broadcastAll(); }
 });
