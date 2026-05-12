@@ -52,15 +52,44 @@ function showQr(url) {
 }
 
 function makePeerOptions() {
-  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+  const h = location.hostname;
+  if (h === 'localhost' || h === '127.0.0.1' || h === '') {
+    // file:// or localhost — use the local PeerJS server
     return { host: 'localhost', port: 9000, path: '/peerjs' };
   }
   return {};
 }
 
+let _peerRetries = 0;
+let _peerConnectTimer = null;
+
+function setLobbyStatus(msg) {
+  const el = document.getElementById('lobby-url');
+  if (el && el.textContent !== msg && !el.textContent.startsWith('http')) el.textContent = msg;
+}
+
 function initPeer() {
+  if (peer) { try { peer.destroy(); } catch(e) {} peer = null; }
+
+  const urlEl = document.getElementById('lobby-url');
+  if (urlEl && !urlEl.textContent.startsWith('http')) {
+    urlEl.textContent = _peerRetries > 0 ? `Retrying… (${_peerRetries})` : 'Connecting…';
+  }
+
+  clearTimeout(_peerConnectTimer);
+  _peerConnectTimer = setTimeout(() => {
+    if (!peer || !peer.id) {
+      _peerRetries++;
+      setLobbyStatus(`No connection — retrying (${_peerRetries})…`);
+      initPeer();
+    }
+  }, 8000);
+
   peer = new Peer(undefined, makePeerOptions());
+
   peer.on('open', id => {
+    clearTimeout(_peerConnectTimer);
+    _peerRetries = 0;
     const url = buildPlayerUrl(id);
     const el = document.getElementById('lobby-url');
     if (el) el.textContent = url;
@@ -74,7 +103,13 @@ function initPeer() {
       conn.on('error', () => handleDisconnect(conn));
     });
   });
-  peer.on('error', () => setTimeout(initPeer, 3000));
+  peer.on('error', err => {
+    clearTimeout(_peerConnectTimer);
+    const delay = Math.min(2000 * Math.pow(1.5, _peerRetries), 15000);
+    _peerRetries++;
+    setLobbyStatus(`Connection failed — retrying in ${Math.round(delay/1000)}s…`);
+    setTimeout(initPeer, delay);
+  });
   peer.on('disconnected', () => { try { peer.reconnect(); } catch(e) {} });
 }
 
