@@ -16,6 +16,9 @@ function showQrCode(url) {
 }
 
 function buildPlayerUrl(peerId) {
+  if (window.SERVER_LAN_IP && window.SERVER_PORT) {
+    return `http://${SERVER_LAN_IP}:${SERVER_PORT}/player.html?room=${peerId}`;
+  }
   const base = new URL('player.html', location.href);
   base.searchParams.set('room', peerId);
   return base.toString();
@@ -69,6 +72,10 @@ function makePeerOptions() {
 }
 
 function initHost() {
+  if (isLanMode()) {
+    _initLanHost();
+    return;
+  }
   if (peer) { try { peer.destroy(); } catch(e) {} peer = null; }
 
   const joinUrlEl = document.getElementById('join-url');
@@ -104,6 +111,23 @@ function initHost() {
     setTimeout(initHost, delay);
   });
   peer.on('disconnected', () => { try { peer.reconnect(); } catch(e) {} });
+}
+
+function _initLanHost() {
+  const joinUrlEl = document.getElementById('join-url');
+  if (joinUrlEl) joinUrlEl.textContent = 'Starting…';
+  peer = new LocalHostPeer();
+  peer.on('open', id => {
+    myPeerId = id;
+    const url = buildPlayerUrl(id);
+    if (joinUrlEl) joinUrlEl.textContent = url;
+    showQrCode(url);
+  });
+  peer.on('connection', conn => {
+    conn.on('open', () => handleNewConnection(conn));
+    conn.on('error', () => {});
+  });
+  peer.on('error', err => console.warn('LAN host error:', err));
 }
 
 function handleNewConnection(conn) {

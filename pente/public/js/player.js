@@ -173,6 +173,18 @@ function connect() {
   const roomId = new URLSearchParams(location.search).get('room');
   if (!roomId) { showScreenById('screen-no-room'); return; }
 
+  if (isLanMode()) {
+    peer = new LocalPlayerPeer();
+    peer.on('open', () => {
+      conn = peer.connect(roomId, { reliable: true });
+      conn.on('open', () => { send({ type: 'reconnect', deviceId }); flushQueue(); });
+      conn.on('data', handleServerMsg);
+      conn.on('close', () => { if (!kicked) setTimeout(connect, 2000); });
+      conn.on('error', () => { if (!kicked) setTimeout(connect, 2000); });
+    });
+    peer.on('error', () => { if (!kicked) setTimeout(connect, 3000); });
+    return;
+  }
   const h = location.hostname;
   const peerOpts = (h === 'localhost' || h === '127.0.0.1' || h === '')
     ? { host: 'localhost', port: 9000, path: '/peerjs' }

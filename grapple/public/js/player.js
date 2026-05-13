@@ -35,6 +35,23 @@ function connect() {
   if (!roomId) { showScreen('no-room'); return; }
 
   const h = location.hostname;
+  if (isLanMode()) {
+    peer = new LocalPlayerPeer();
+    peer.on('open', () => {
+      conn = peer.connect(roomId, { reliable: true });
+      conn.on('open', () => {
+        if (hasJoined) {
+          const savedName = localStorage.getItem('grapple-name') || 'Player';
+          send({ type: 'join', name: savedName, deviceId });
+        }
+      });
+      conn.on('data', handleMsg);
+      conn.on('close', () => { if (!hasJoined) return; showScreen('disconnected'); });
+      conn.on('error', () => showScreen('disconnected'));
+    });
+    peer.on('error', () => showScreen('disconnected'));
+    return;
+  }
   const peerOpts = (h === 'localhost' || h === '127.0.0.1' || h === '')
     ? { host: 'localhost', port: 9000, path: '/peerjs' }
     : { host: SIGNAL_HOST, secure: true, port: 443, path: '/peerjs' };

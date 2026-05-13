@@ -1,0 +1,7 @@
+{
+  "name": "pente-local",
+  "private": true,
+  "dependencies": {
+    "ws": "^8.0.0"
+  }
+}
