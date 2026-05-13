@@ -1,9 +1,10 @@
 // =====================================================================
-// PENTE PARTY — PLAYER (PeerJS, static / GitHub Pages)
+// PENTE PARTY — PLAYER
 // =====================================================================
-// Connects to a host via PeerJS. Room ID is in the URL: ?room=<peerId>
+// Connects to host via Trystero (BitTorrent signaling) on GitHub Pages,
+// or via local WebSocket relay when running node server.js on LAN.
+// Room code is in the URL: ?room=<code>
 // =====================================================================
-const SIGNAL_HOST = 'nksimmons-games-signaling.onrender.com';
 
 const BG_COLORS = ['#e63946','#457b9d','#2a9d8f','#e9c46a','#f4a261','#264653','#6a4c93','#1982c4','#8ac926','#ff595e','#ff924c','#c77dff'];
 const DRAW_COLORS = ['#111111','#ff4444','#ff8800','#ffdd00','#44cc44','#2299ff','#aa44ff','#ff66cc','#88ccff','#888888','#ffffff'];
@@ -185,13 +186,10 @@ function connect() {
     peer.on('error', () => { if (!kicked) setTimeout(connect, 3000); });
     return;
   }
-  const h = location.hostname;
-  const peerOpts = (h === 'localhost' || h === '127.0.0.1' || h === '')
-    ? { host: 'localhost', port: 9000, path: '/peerjs' }
-    : { host: SIGNAL_HOST, secure: true, port: 443, path: '/peerjs' };
-  peer = new Peer(undefined, peerOpts);
+  // Trystero: BitTorrent-signaled WebRTC, no server needed
+  peer = new TrysteroPlayerPeer('nksimmons-pente');
   peer.on('open', () => {
-    conn = peer.connect(roomId, { reliable: true });
+    conn = peer.connect(roomId);
     conn.on('open', () => {
       send({ type: 'reconnect', deviceId });
       flushQueue();

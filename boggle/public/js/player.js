@@ -256,17 +256,12 @@ function connectWs() {
   };
 }
 
-// --- PeerJS Connection (serverless / GitHub Pages) ---
-const SIGNAL_HOST = 'nksimmons-games-signaling.onrender.com';
-function connectPeer(hostPeerId) {
-  if (typeof Peer === 'undefined') {
-    console.error('PeerJS not loaded');
-    return;
-  }
-  playerPeer = new Peer(undefined, { host: SIGNAL_HOST, secure: true, port: 443, path: '/peerjs' });
+// --- Trystero Connection (BitTorrent signaling — no server needed) ---
+function connectPeer(roomCode) {
+  playerPeer = new TrysteroPlayerPeer('nksimmons-boggle');
 
   playerPeer.on('open', () => {
-    const conn = playerPeer.connect(hostPeerId, { reliable: true });
+    const conn = playerPeer.connect(roomCode);
 
     conn.on('open', () => {
       sendFn = (msg) => conn.send(msg);
@@ -279,12 +274,12 @@ function connectPeer(hostPeerId) {
 
     conn.on('close', () => {
       sendFn = null;
-      setTimeout(() => connectPeer(hostPeerId), 3000);
+      setTimeout(() => connectPeer(roomCode), 3000);
     });
   });
 
   playerPeer.on('error', () => {
-    setTimeout(() => connectPeer(hostPeerId), 3000);
+    setTimeout(() => connectPeer(roomCode), 3000);
   });
 }
 

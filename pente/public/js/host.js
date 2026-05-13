@@ -59,39 +59,21 @@ function resetGs() {
 let peer = null;
 let myPeerId = null;
 let _peerRetries = 0;
-let _peerConnectTimer = null;
-
-const SIGNAL_HOST = 'nksimmons-games-signaling.onrender.com';
-
-function makePeerOptions() {
-  const h = location.hostname;
-  if (h === 'localhost' || h === '127.0.0.1' || h === '') {
-    return { host: 'localhost', port: 9000, path: '/peerjs' };
-  }
-  return { host: SIGNAL_HOST, secure: true, port: 443, path: '/peerjs' };
-}
 
 function initHost() {
   if (isLanMode()) {
     _initLanHost();
     return;
   }
-  if (peer) { try { peer.destroy(); } catch(e) {} peer = null; }
+  _initTrysteroHost();
+}
 
+function _initTrysteroHost() {
   const joinUrlEl = document.getElementById('join-url');
-  if (joinUrlEl && !String(joinUrlEl.textContent).startsWith('http')) {
-    joinUrlEl.textContent = _peerRetries > 0 ? `Retrying… (${_peerRetries})` : 'Connecting…';
-  }
+  if (joinUrlEl) joinUrlEl.textContent = 'Connecting…';
 
-  clearTimeout(_peerConnectTimer);
-  _peerConnectTimer = setTimeout(() => {
-    if (!peer || !peer.id) { _peerRetries++; initHost(); }
-  }, 8000);
-
-  peer = new Peer(undefined, makePeerOptions());
+  peer = new TrysteroHostPeer('nksimmons-pente');
   peer.on('open', (id) => {
-    clearTimeout(_peerConnectTimer);
-    _peerRetries = 0;
     myPeerId = id;
     const url = buildPlayerUrl(id);
     if (joinUrlEl) joinUrlEl.textContent = url;
@@ -101,16 +83,7 @@ function initHost() {
     conn.on('open', () => handleNewConnection(conn));
     conn.on('error', () => {});
   });
-  peer.on('error', (err) => {
-    clearTimeout(_peerConnectTimer);
-    const delay = Math.min(2000 * Math.pow(1.5, _peerRetries), 15000);
-    _peerRetries++;
-    if (joinUrlEl && !String(joinUrlEl.textContent).startsWith('http')) {
-      joinUrlEl.textContent = `Connection failed — retrying in ${Math.round(delay/1000)}s…`;
-    }
-    setTimeout(initHost, delay);
-  });
-  peer.on('disconnected', () => { try { peer.reconnect(); } catch(e) {} });
+  peer.on('error', (err) => console.warn('Trystero host error:', err));
 }
 
 function _initLanHost() {

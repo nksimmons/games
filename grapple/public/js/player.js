@@ -3,7 +3,7 @@
 // =====================================================================
 // Connects to the host via PeerJS. Room ID from URL: ?room=<peerId>
 // The first player to join is the "host player" and can start the game.
-const SIGNAL_HOST = 'nksimmons-games-signaling.onrender.com';
+const SIGNAL_HOST = 'nksimmons-games-signaling.onrender.com'; // unused, kept for reference
 // =====================================================================
 
 let peer = null;
@@ -34,7 +34,6 @@ function connect() {
   const roomId = params.get('room');
   if (!roomId) { showScreen('no-room'); return; }
 
-  const h = location.hostname;
   if (isLanMode()) {
     peer = new LocalPlayerPeer();
     peer.on('open', () => {
@@ -52,19 +51,15 @@ function connect() {
     peer.on('error', () => showScreen('disconnected'));
     return;
   }
-  const peerOpts = (h === 'localhost' || h === '127.0.0.1' || h === '')
-    ? { host: 'localhost', port: 9000, path: '/peerjs' }
-    : { host: SIGNAL_HOST, secure: true, port: 443, path: '/peerjs' };
-  peer = new Peer(undefined, peerOpts);
+  // Trystero: BitTorrent-signaled WebRTC, no server needed
+  peer = new TrysteroPlayerPeer('nksimmons-grapple');
   peer.on('open', () => {
-    conn = peer.connect(roomId, { reliable: true });
+    conn = peer.connect(roomId);
     conn.on('open', () => {
-      // Connected — if already joined (page refresh), try to rejoin
       if (hasJoined) {
         const savedName = localStorage.getItem('grapple-name') || 'Player';
         send({ type: 'join', name: savedName, deviceId });
       }
-      // Otherwise show join screen so user can enter name
     });
     conn.on('data', handleMsg);
     conn.on('close', () => { if (!hasJoined) return; showScreen('disconnected'); });

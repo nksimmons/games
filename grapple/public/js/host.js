@@ -54,20 +54,7 @@ function showQr(url) {
   } catch(e) { console.warn('QR failed:', e); }
 }
 
-// Deployed signaling server (Render free tier) — update after first deploy:
-// https://dashboard.render.com → New Web Service → connect repo → Root Dir: games/signaling
-const SIGNAL_HOST = 'nksimmons-games-signaling.onrender.com';
-
-function makePeerOptions() {
-  const h = location.hostname;
-  if (h === 'localhost' || h === '127.0.0.1' || h === '') {
-    return { host: 'localhost', port: 9000, path: '/peerjs' };
-  }
-  return { host: SIGNAL_HOST, secure: true, port: 443, path: '/peerjs' };
-}
-
 let _peerRetries = 0;
-let _peerConnectTimer = null;
 
 function setLobbyStatus(msg) {
   const el = document.getElementById('lobby-url');
@@ -79,30 +66,17 @@ function initPeer() {
     _initLanHost();
     return;
   }
-  if (peer) { try { peer.destroy(); } catch(e) {} peer = null; }
+  _initTrysteroHost();
+}
 
+function _initTrysteroHost() {
   const urlEl = document.getElementById('lobby-url');
-  if (urlEl && !urlEl.textContent.startsWith('http')) {
-    urlEl.textContent = _peerRetries > 0 ? `Retrying… (${_peerRetries})` : 'Connecting…';
-  }
-
-  clearTimeout(_peerConnectTimer);
-  _peerConnectTimer = setTimeout(() => {
-    if (!peer || !peer.id) {
-      _peerRetries++;
-      setLobbyStatus(`No connection — retrying (${_peerRetries})…`);
-      initPeer();
-    }
-  }, 8000);
-
-  peer = new Peer(undefined, makePeerOptions());
+  if (urlEl) urlEl.textContent = 'Connecting…';
+  peer = new TrysteroHostPeer('nksimmons-grapple');
 
   peer.on('open', id => {
-    clearTimeout(_peerConnectTimer);
-    _peerRetries = 0;
     const url = buildPlayerUrl(id);
-    const el = document.getElementById('lobby-url');
-    if (el) el.textContent = url;
+    if (urlEl) urlEl.textContent = url;
     showQr(url);
   });
   peer.on('connection', conn => {
@@ -113,14 +87,7 @@ function initPeer() {
       conn.on('error', () => handleDisconnect(conn));
     });
   });
-  peer.on('error', err => {
-    clearTimeout(_peerConnectTimer);
-    const delay = Math.min(2000 * Math.pow(1.5, _peerRetries), 15000);
-    _peerRetries++;
-    setLobbyStatus(`Connection failed — retrying in ${Math.round(delay/1000)}s…`);
-    setTimeout(initPeer, delay);
-  });
-  peer.on('disconnected', () => { try { peer.reconnect(); } catch(e) {} });
+  peer.on('error', err => console.warn('Trystero host error:', err));
 }
 
 function _initLanHost() {

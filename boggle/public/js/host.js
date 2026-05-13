@@ -571,8 +571,6 @@ function showQrCode(url) {
   } catch (e) { console.warn('QR generation failed:', e); }
 }
 
-const SIGNAL_HOST = 'nksimmons-games-signaling.onrender.com';
-
 async function initPeerHost() {
   // Load dictionary
   const dictPath = new URL('../csw19.txt', location.href).href;
@@ -599,8 +597,8 @@ async function initPeerHost() {
     broadcastAllPlayers();
   });
 
-  // PeerJS signaling (via self-hosted Render server)
-  hostPeer = new Peer(undefined, { host: SIGNAL_HOST, secure: true, port: 443, path: '/peerjs' });
+  // Trystero signaling (BitTorrent trackers — no server needed)
+  hostPeer = new TrysteroHostPeer('nksimmons-boggle');
 
   hostPeer.on('open', (id) => {
     const playerUrl = buildPlayerUrl(id);
