@@ -257,12 +257,13 @@ function connectWs() {
 }
 
 // --- PeerJS Connection (serverless / GitHub Pages) ---
+const SIGNAL_HOST = 'nksimmons-games-signaling.onrender.com';
 function connectPeer(hostPeerId) {
   if (typeof Peer === 'undefined') {
     console.error('PeerJS not loaded');
     return;
   }
-  playerPeer = new Peer();
+  playerPeer = new Peer(undefined, { host: SIGNAL_HOST, secure: true, port: 443, path: '/peerjs' });
 
   playerPeer.on('open', () => {
     const conn = playerPeer.connect(hostPeerId, { reliable: true });

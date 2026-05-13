@@ -305,6 +305,10 @@ function handlePlayerAction(playerId, action) {
 }
 
 // ─── PeerJS Host ──────────────────────────────────────────────────────────────
+const SIGNAL_HOST = 'nksimmons-games-signaling.onrender.com';
+function makePeerOptions() {
+  return { host: SIGNAL_HOST, secure: true, port: 443, path: '/peerjs' };
+}
 function buildPlayerUrl(peerId) {
   const url = new URL('player.html', location.href);
   url.search = '?room=' + encodeURIComponent(peerId);
@@ -321,7 +325,7 @@ function showQrCode(url) {
   } catch (e) { console.warn('QR generation failed:', e); }
 }
 function initPeerHost() {
-  hostPeer = new Peer();
+  hostPeer = new Peer(undefined, makePeerOptions());
   hostPeer.on('open', (id) => {
     const playerUrl = buildPlayerUrl(id);
     showQrCode(playerUrl);
