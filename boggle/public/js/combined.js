@@ -197,7 +197,7 @@ function getPlayerState(playerId) {
   const myWords = gameState.roundWords.get(playerId) || [];
   const playerWordCounts = {};
   for (const [pid, words] of gameState.roundWords) playerWordCounts[pid] = words.filter(w => w.valid).length;
-  return { phase: gameState.phase, board: gameState.board, round: gameState.round, maxRounds: gameState.maxRounds, myWords, players: getPlayerList().sort((a, b) => b.totalScore - a.totalScore), timerEnd: gameState.timerEnd, hostPlayerId: gameState.hostPlayerId, playerWordCounts };
+  return { phase: gameState.phase, board: gameState.board, round: gameState.round, maxRounds: gameState.maxRounds, myWords, players: getPlayerList().sort((a, b) => b.totalScore - a.totalScore), timerEnd: gameState.timerEnd, hostPlayerId: gameState.hostPlayerId, playerWordCounts, scoringPhases: gameState.scoringPhases || null, lastRoundWinnerId: gameState.lastRoundWinnerId || null };
 }
 function broadcastHostState() { myState = getPlayerState(myPlayerId); renderGameScreens(); }
 function broadcastPlayerList() { broadcastToRtcPlayers({ type: 'players', players: getPlayerList() }); }
@@ -235,6 +235,8 @@ function startRound() {
   gameState.board = board; gameState.validWordsOnBoard = allWords;
   gameState.phase = 'playing'; gameState.roundWords = new Map();
   gameState.timerEnd = Date.now() + ROUND_DURATION * 1000;
+  gameState.scoringPhases = null; gameState.lastRoundWinnerId = null;
+  scoringAnimationActive = false;
   for (const [id] of gameState.players) gameState.roundWords.set(id, []);
   selectedPath = [];
   broadcastAllPlayers();
@@ -256,6 +258,11 @@ function endRound() {
   let best = 0, winnerId = null;
   for (const [pid] of gameState.roundWords) { const rs = scored.playerRoundScores[pid] || 0; if (rs > best) { best = rs; winnerId = pid; } }
   if (winnerId) { const w = gameState.players.get(winnerId); if (w) w.roundWins++; }
+  gameState.scoringPhases = [
+    { phase: 'common', items: scored.commonItems },
+    { phase: 'unique', items: scored.uniqueItems },
+  ];
+  gameState.lastRoundWinnerId = winnerId;
   broadcastAllPlayers();
 }
 function handleWordSubmission(playerId, word) {
@@ -480,7 +487,9 @@ function renderGameScreens() {
   switch (myState.phase) {
     case 'lobby': renderLobby(); break;
     case 'playing': renderPlaying(); break;
-    case 'roundEnd': renderRoundEnd(); break;
+    case 'roundEnd':
+      if (!scoringAnimationActive && scoringAnimationDoneForRound !== myState.round) renderRoundEnd();
+      break;
     case 'gameOver': renderGameOver(); break;
   }
 }
@@ -550,20 +559,155 @@ function renderMyWords() {
     '<li class="word-tag ' + (w.valid ? 'valid' : 'invalid') + '">' + esc(w.word) + (w.valid ? '<span class="score">+' + w.score + '</span>' : '') + '</li>'
   ).join('') + '</ul>';
 }
+// ─── Round End (animated scoring) ────────────────────────────────────────────
+let scoringAnimationActive = false;
+let scoringAnimationDoneForRound = -1;
+
+function getRoundScoreFromPhases(playerId, phases) {
+  let total = 0;
+  if (!phases) return 0;
+  for (const ph of phases) {
+    if (ph.phase === 'common') {
+      for (const item of ph.items) { if (item.playerIds && item.playerIds.includes(playerId)) total += item.score; }
+    } else if (ph.phase === 'unique') {
+      for (const item of ph.items) { if (item.playerId === playerId) total += item.totalScore; }
+    }
+  }
+  return total;
+}
+
 function renderRoundEnd() {
   const ren = document.getElementById('round-end-num'); if (ren) ren.textContent = myState.round;
   updateHostControls();
-  const c = document.getElementById('round-end-words');
-  if (c) {
-    const words = myState.myWords || [];
-    c.innerHTML = '<h2 style="margin-bottom:0.5rem">Your Words</h2><ul class="word-list">' + words.map(w => {
-      let cls = 'invalid';
-      if (w.reason === 'unique') cls = 'valid'; else if (w.reason === 'common') cls = 'common';
-      return '<li class="word-tag ' + cls + '">' + esc(w.word) + (w.finalScore ? '<span class="score">+' + w.finalScore + '</span>' : '') + '</li>';
-    }).join('') + '</ul>';
+  const wordsCard = document.getElementById('round-end-words');
+  const scoresCard = document.getElementById('round-end-scores');
+
+  function showStatic() {
+    if (scoresCard) scoresCard.style.display = '';
+    if (wordsCard) {
+      const words = myState.myWords || [];
+      wordsCard.innerHTML = '<h2 style="margin-bottom:0.5rem">Your Words</h2><ul class="word-list">' + words.map(w => {
+        let cls = 'invalid';
+        if (w.reason === 'unique') cls = 'valid'; else if (w.reason === 'common') cls = 'common';
+        return '<li class="word-tag ' + cls + '">' + esc(w.word) + (w.finalScore ? '<span class="score">+' + w.finalScore + '</span>' : '') + '</li>';
+      }).join('') + '</ul>';
+    }
+    const standings = document.getElementById('player-standings');
+    if (standings) renderStandings(standings);
   }
-  const standings = document.getElementById('player-standings');
-  if (standings) renderStandings(standings);
+
+  if (!myState.scoringPhases) { showStatic(); return; }
+
+  if (scoresCard) scoresCard.style.display = 'none';
+  if (wordsCard) {
+    wordsCard.innerHTML = `
+      <div id="scoring-players" class="scoring-players"></div>
+      <div id="scoring-phase-label" class="scoring-phase-label"></div>
+      <div id="scoring-words" class="scoring-words"></div>
+    `;
+    const playersEl = document.getElementById('scoring-players');
+    if (playersEl && myState.players) {
+      playersEl.innerHTML = myState.players.map(p => {
+        const preScore = p.totalScore - getRoundScoreFromPhases(p.id, myState.scoringPhases);
+        return `<div class="scoring-player-card" id="scoring-player-${p.id}">
+          <div class="avatar" style="background:${p.avatar ? p.avatar.bgColor || '#4a3a6e' : '#4a3a6e'}">${renderAvatarContent(p.avatar, p.roundWins)}</div>
+          <div class="player-name">${esc(p.name)}</div>
+          <div class="scoring-player-score" id="score-display-${p.id}">${preScore}</div>
+          <div class="score-float-container" id="float-${p.id}"></div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  scoringAnimationActive = true;
+  animateScoring(myState.scoringPhases, () => {
+    scoringAnimationActive = false;
+    scoringAnimationDoneForRound = myState.round;
+    if (myState.players) {
+      myState.players.forEach(p => {
+        const el = document.getElementById(`score-display-${p.id}`);
+        if (el) el.textContent = p.totalScore;
+      });
+    }
+    showStatic();
+  });
+}
+
+function animateScoring(phases, onComplete) {
+  const commonPhase = phases.find(p => p.phase === 'common');
+  const uniquePhase = phases.find(p => p.phase === 'unique');
+
+  const runningScores = {};
+  if (myState.players) {
+    myState.players.forEach(p => { runningScores[p.id] = p.totalScore - getRoundScoreFromPhases(p.id, phases); });
+  }
+
+  const phaseLabel = document.getElementById('scoring-phase-label');
+  const wordsEl = document.getElementById('scoring-words');
+  if (!phaseLabel || !wordsEl) { onComplete(); return; }
+
+  phaseLabel.textContent = '🤝 Common Words';
+  phaseLabel.className = 'scoring-phase-label fade-in';
+  wordsEl.innerHTML = '';
+
+  let delay = 600;
+
+  if (commonPhase && commonPhase.items.length > 0) {
+    commonPhase.items.forEach((item, i) => {
+      setTimeout(() => {
+        const tag = document.createElement('span');
+        tag.className = 'word-tag common pop-in';
+        tag.innerHTML = `${esc(item.word.toUpperCase())} <span class="score">+${item.score}</span>`;
+        wordsEl.appendChild(tag);
+        item.playerIds.forEach(pid => {
+          runningScores[pid] = (runningScores[pid] || 0) + item.score;
+          floatScore(pid, `+${item.score}`, runningScores[pid]);
+        });
+      }, delay + i * 400);
+    });
+    delay += commonPhase.items.length * 400 + 1200;
+  } else {
+    setTimeout(() => {
+      wordsEl.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:1rem">No common words this round!</div>';
+    }, delay);
+    delay += 1500;
+  }
+
+  setTimeout(() => {
+    phaseLabel.textContent = `⭐ Unique Words (+${UNIQUE_BONUS} bonus each)`;
+    phaseLabel.className = 'scoring-phase-label fade-in';
+    wordsEl.innerHTML = '';
+
+    if (uniquePhase && uniquePhase.items.length > 0) {
+      uniquePhase.items.forEach((item, i) => {
+        setTimeout(() => {
+          const tag = document.createElement('span');
+          tag.className = 'word-tag valid pop-in';
+          const bonusText = item.lengthBonus > 0 ? ` (${item.baseScore}+${item.lengthBonus}+${item.uniqueBonus})` : '';
+          tag.innerHTML = `${esc(item.word.toUpperCase())} <span class="score">+${item.totalScore}${bonusText}</span>`;
+          wordsEl.appendChild(tag);
+          runningScores[item.playerId] = (runningScores[item.playerId] || 0) + item.totalScore;
+          floatScore(item.playerId, `+${item.totalScore}`, runningScores[item.playerId]);
+        }, i * 350);
+      });
+      setTimeout(onComplete, uniquePhase.items.length * 350 + 1500);
+    } else {
+      wordsEl.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:1rem">No unique words this round!</div>';
+      setTimeout(onComplete, 1500);
+    }
+  }, delay);
+}
+
+function floatScore(playerId, text, newTotal) {
+  const container = document.getElementById(`float-${playerId}`);
+  const scoreEl = document.getElementById(`score-display-${playerId}`);
+  if (!container) return;
+  const float = document.createElement('div');
+  float.className = 'score-float';
+  float.textContent = text;
+  container.appendChild(float);
+  setTimeout(() => float.remove(), 1200);
+  if (scoreEl) setTimeout(() => { scoreEl.textContent = newTotal; }, 400);
 }
 function renderGameOver() {
   const fl = document.getElementById('final-player-list');
