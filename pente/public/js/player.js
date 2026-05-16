@@ -1,5 +1,5 @@
 // =====================================================================
-// PENTE PARTY — PLAYER
+// STONES OF FIVE — PLAYER
 // =====================================================================
 // Connects to host via Trystero (BitTorrent signaling) on GitHub Pages,
 // or via local WebSocket relay when running node server.js on LAN.
@@ -31,21 +31,21 @@ let undoRequestActive = null;
 
 // ── Device identity ───────────────────────────────────────────────────
 function getDeviceId() {
-  let id = localStorage.getItem('pente-device-id');
+  let id = localStorage.getItem('sof-device-id');
   if (!id) {
     id = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
-    localStorage.setItem('pente-device-id', id);
+    localStorage.setItem('sof-device-id', id);
   }
   return id;
 }
 function saveProfile(name, avatar) {
-  localStorage.setItem('pente-name', name);
-  localStorage.setItem('pente-avatar', JSON.stringify(avatar));
+  localStorage.setItem('sof-name', name);
+  localStorage.setItem('sof-avatar', JSON.stringify(avatar));
 }
 function loadProfile() {
-  const name = localStorage.getItem('pente-name');
+  const name = localStorage.getItem('sof-name');
   let avatar = null;
-  try { avatar = JSON.parse(localStorage.getItem('pente-avatar') || 'null'); } catch(e) {}
+  try { avatar = JSON.parse(localStorage.getItem('sof-avatar') || 'null'); } catch(e) {}
   return { name, avatar };
 }
 const deviceId = getDeviceId();
@@ -187,7 +187,7 @@ function connect() {
     return;
   }
   // Trystero: BitTorrent-signaled WebRTC, no server needed
-  peer = new TrysteroPlayerPeer('nksimmons-pente');
+  peer = new TrysteroPlayerPeer('nksimmons-stones-of-five');
   peer.on('open', () => {
     conn = peer.connect(roomId);
     conn.on('open', () => {

@@ -1,4 +1,4 @@
-// Shared Pente board renderer
+// Shared Stones of Five board renderer
 // BOARD_SIZE is declared in game.js which is loaded first
 const STONE_COLORS = [null, '#e0e0e0', '#1a1a1a', '#3b82f6', '#ef4444'];
 const STONE_HIGHLIGHTS = [null, '#333', '#fff', '#fff', '#fff'];

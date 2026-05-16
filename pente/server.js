@@ -1,5 +1,5 @@
 /**
- * Pente Party — local game server
+ * Stones of Five — local game server
  * Serves game files over HTTP and relays player↔host messages over WebSockets.
  * No internet required — works purely on your local network.
  *
@@ -118,7 +118,7 @@ wss.on('connection', ws => {
 httpServer.listen(PORT, () => {
   const lan = getLanIp();
   const playerUrl = `http://${lan}:${PORT}/player.html`;
-  console.log('\n♟️  Pente Party — local server ready\n');
+  console.log('\n🪨  Stones of Five — local server ready\n');
   console.log(`   Host screen : http://localhost:${PORT}/host.html`);
   console.log(`   Players join: ${playerUrl}`);
   console.log(`\n   Share that URL (or QR code) with players on the same WiFi.\n`);

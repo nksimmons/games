@@ -1,4 +1,4 @@
-// Pente game engine — browser-compatible (no module.exports)
+// Stones of Five game engine — browser-compatible (no module.exports)
 const BOARD_SIZE = 19;
 const CENTER = 9;
 const WIN_LENGTH = 5;

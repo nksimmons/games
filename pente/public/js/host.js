@@ -1,5 +1,5 @@
 // =====================================================================
-// PENTE PARTY — DEDICATED HOST (PeerJS, static / GitHub Pages)
+// STONES OF FIVE — DEDICATED HOST (PeerJS, static / GitHub Pages)
 // =====================================================================
 // This runs fully in the browser — no server required.
 // Players join by scanning the QR code or visiting the URL shown here.
@@ -72,7 +72,7 @@ function _initTrysteroHost() {
   const joinUrlEl = document.getElementById('join-url');
   if (joinUrlEl) joinUrlEl.textContent = 'Connecting…';
 
-  peer = new TrysteroHostPeer('nksimmons-pente');
+  peer = new TrysteroHostPeer('nksimmons-stones-of-five');
   peer.on('open', (id) => {
     myPeerId = id;
     const url = buildPlayerUrl(id);

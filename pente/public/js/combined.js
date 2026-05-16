@@ -1,5 +1,5 @@
 // =====================================================================
-// PENTE PARTY — COMBINED (host + player 1) — PeerJS, static GitHub Pages
+// STONES OF FIVE — COMBINED (host + player 1) — PeerJS, static GitHub Pages
 // =====================================================================
 // One device acts as host AND plays as player 1. Remote players scan a
 // QR code to join as player.html?room=<peerId>.
@@ -45,14 +45,14 @@ function resetGs() {
 
 // ── Device ID / profile ───────────────────────────────────────────────
 function getDeviceId() {
-  let id = localStorage.getItem('pente-combined-device-id');
-  if (!id) { id = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)); localStorage.setItem('pente-combined-device-id', id); }
+  let id = localStorage.getItem('sof-combined-device-id');
+  if (!id) { id = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)); localStorage.setItem('sof-combined-device-id', id); }
   return id;
 }
-function saveProfile(name, avatar) { localStorage.setItem('pente-combined-name', name); localStorage.setItem('pente-combined-avatar', JSON.stringify(avatar)); }
+function saveProfile(name, avatar) { localStorage.setItem('sof-combined-name', name); localStorage.setItem('sof-combined-avatar', JSON.stringify(avatar)); }
 function loadProfile() {
-  const name = localStorage.getItem('pente-combined-name'); let avatar = null;
-  try { avatar = JSON.parse(localStorage.getItem('pente-combined-avatar') || 'null'); } catch(e) {}
+  const name = localStorage.getItem('sof-combined-name'); let avatar = null;
+  try { avatar = JSON.parse(localStorage.getItem('sof-combined-avatar') || 'null'); } catch(e) {}
   return { name, avatar };
 }
 const deviceId = getDeviceId();
@@ -175,7 +175,7 @@ function selfJoin() {
 
 // ── Trystero host ─────────────────────────────────────────────────────
 function initPeer() {
-  peer = new TrysteroHostPeer('nksimmons-pente');
+  peer = new TrysteroHostPeer('nksimmons-stones-of-five');
   peer.on('open', (id) => {
     showQrCode(buildPlayerUrl(id));
     document.getElementById('room-id').textContent = id;
