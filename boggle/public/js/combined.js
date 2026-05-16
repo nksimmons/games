@@ -553,8 +553,7 @@ function renderMiniScoreboard() {
     '<div class="mini-player ' + (p.id === myPlayerId ? 'me' : '') + '">' +
     '<div class="avatar" style="background:' + (p.avatar && p.avatar.bgColor ? p.avatar.bgColor : '#4a3a6e') + ';width:32px;height:32px;font-size:0.85rem;margin:0">' + renderAvatarContent(p.avatar, p.roundWins) + '</div>' +
     '<div class="mini-name">' + esc(p.name) + '</div>' +
-    '<div class="mini-words">' + (counts[p.id] || 0) + '</div>' +
-    '<div class="mini-score">' + p.totalScore + 'pt</div></div>'
+    '<div class="mini-words">' + (counts[p.id] || 0) + '</div></div>'
   ).join('');
 }
 function renderPlaying() {
