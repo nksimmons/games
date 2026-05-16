@@ -1,0 +1,14 @@
+{
+  "name": "trystero-build",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild entry.js --bundle --minify --format=iife --global-name=__trystero_unused --outfile=dist/trystero-peer.js"
+  },
+  "dependencies": {
+    "trystero": "0.24.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}
