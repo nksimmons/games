@@ -10,9 +10,17 @@ const DICE_4x4 = [
   'DISTTY', 'EEGHNW', 'EEINSU', 'EHRTVW',
   'EIOSST', 'ELRTTY', 'HIMNQU', 'HLNNRZ',
 ];
-const ROUND_DURATION = 90;
-const MAX_ROUNDS = 5;
-const UNIQUE_BONUS = 2;
+const DICE_5x5 = [
+  'AAAFRS', 'AAEEEE', 'AAFIRS', 'ADENNN', 'AEEEEM',
+  'AEEGMU', 'AEGMNN', 'AFIRSY', 'BJKQXZ', 'CCENST',
+  'CEIILT', 'CEILPT', 'CEIPST', 'DDHNOT', 'DHHLOR',
+  'DHLNOR', 'DHLNOR', 'EIIITT', 'EMOTTT', 'ENSSSU',
+  'FIPRSY', 'GORRVW', 'IPRRRY', 'NOOTUW', 'OOOTTU',
+];
+const LETTER_FREQ = 'EEEEEEEEEEEEAAAAAAAAAIIIIIIIIIOOOOOOOONNNNNNRRRRRRTTTTTTLLLLSSSSUUUUDDDDGGGBBCCMMPPFFHHVVWWYYKJXQZ';
+const DEFAULT_ROUND_DURATION = 90;
+const DEFAULT_MAX_ROUNDS = 5;
+const DEFAULT_GRID_SIZE = 4;
 
 // ─── Dictionary ───────────────────────────────────────────────────────────────
 class TrieNode { constructor() { this.children = {}; this.isWord = false; } }
@@ -89,7 +97,7 @@ function sanitizeAvatar(av) {
 
 // ─── Game State ───────────────────────────────────────────────────────────────
 function createFreshState() {
-  return { phase: 'lobby', players: new Map(), board: null, round: 0, maxRounds: MAX_ROUNDS, timerEnd: null, roundWords: new Map(), validWordsOnBoard: new Set(), hostPlayerId: null, scoringPhases: null };
+  return { phase: 'lobby', players: new Map(), board: null, round: 0, maxRounds: DEFAULT_MAX_ROUNDS, timerEnd: null, roundWords: new Map(), validWordsOnBoard: new Set(), hostPlayerId: null, scoringPhases: null, gridSize: DEFAULT_GRID_SIZE, roundDuration: DEFAULT_ROUND_DURATION };
 }
 gameState = createFreshState();
 
@@ -105,10 +113,26 @@ function shuffle(arr) {
   for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
   return arr;
 }
-function generateBoard() {
-  const sd = shuffle([...DICE_4x4]);
-  const letters = sd.map(d => { const f = d[Math.floor(Math.random() * d.length)]; return f === 'Q' ? 'Qu' : f; });
-  return [letters.slice(0, 4), letters.slice(4, 8), letters.slice(8, 12), letters.slice(12, 16)];
+function generateBoard(gridSize) {
+  gridSize = gridSize || 4;
+  const totalTiles = gridSize * gridSize;
+  let letters;
+  if (gridSize === 4) {
+    const sd = shuffle([...DICE_4x4]);
+    letters = sd.map(d => { const f = d[Math.floor(Math.random() * d.length)]; return f === 'Q' ? 'Qu' : f; });
+  } else if (gridSize === 5) {
+    const sd = shuffle([...DICE_5x5]);
+    letters = sd.map(d => { const f = d[Math.floor(Math.random() * d.length)]; return f === 'Q' ? 'Qu' : f; });
+  } else {
+    letters = [];
+    for (let i = 0; i < totalTiles; i++) {
+      const ch = LETTER_FREQ[Math.floor(Math.random() * LETTER_FREQ.length)];
+      letters.push(ch === 'Q' ? 'Qu' : ch);
+    }
+  }
+  const board = [];
+  for (let r = 0; r < gridSize; r++) board.push(letters.slice(r * gridSize, r * gridSize + gridSize));
+  return board;
 }
 function getNeighbors4(row, col, g) {
   const n = [];
@@ -197,7 +221,7 @@ function getPlayerState(playerId) {
   const myWords = gameState.roundWords.get(playerId) || [];
   const playerWordCounts = {};
   for (const [pid, words] of gameState.roundWords) playerWordCounts[pid] = words.filter(w => w.valid).length;
-  return { phase: gameState.phase, board: gameState.board, round: gameState.round, maxRounds: gameState.maxRounds, myWords, players: getPlayerList().sort((a, b) => b.totalScore - a.totalScore), timerEnd: gameState.timerEnd, hostPlayerId: gameState.hostPlayerId, playerWordCounts, scoringPhases: gameState.scoringPhases || null, lastRoundWinnerId: gameState.lastRoundWinnerId || null };
+  return { phase: gameState.phase, board: gameState.board, round: gameState.round, maxRounds: gameState.maxRounds, myWords, players: getPlayerList().sort((a, b) => b.totalScore - a.totalScore), timerEnd: gameState.timerEnd, hostPlayerId: gameState.hostPlayerId, playerWordCounts, scoringPhases: gameState.scoringPhases || null, lastRoundWinnerId: gameState.lastRoundWinnerId || null, gridSize: gameState.gridSize || DEFAULT_GRID_SIZE, roundDuration: gameState.roundDuration || DEFAULT_ROUND_DURATION };
 }
 function broadcastHostState() { myState = getPlayerState(myPlayerId); renderGameScreens(); }
 function broadcastPlayerList() { broadcastToRtcPlayers({ type: 'players', players: getPlayerList() }); }
@@ -225,16 +249,18 @@ function broadcastWordCounts() {
 // ─── Game Flow ────────────────────────────────────────────────────────────────
 function startRound() {
   gameState.round++;
-  const MIN_LONG = 8, MAX_ATTEMPTS = 30;
+  const gs = gameState.gridSize || 4;
+  const MIN_LONG = gs === 4 ? 8 : gs === 5 ? 15 : gs === 6 ? 25 : 40;
+  const MAX_ATTEMPTS = 30;
   let board, allWords;
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
-    board = generateBoard(); allWords = findAllWords(board, dictionary);
+    board = generateBoard(gs); allWords = findAllWords(board, dictionary);
     if ([...allWords].filter(w => w.length >= 5).length >= MIN_LONG) break;
   }
   if (!allWords) allWords = findAllWords(board, dictionary);
   gameState.board = board; gameState.validWordsOnBoard = allWords;
   gameState.phase = 'playing'; gameState.roundWords = new Map();
-  gameState.timerEnd = Date.now() + ROUND_DURATION * 1000;
+  gameState.timerEnd = Date.now() + (gameState.roundDuration || DEFAULT_ROUND_DURATION) * 1000;
   gameState.scoringPhases = null; gameState.lastRoundWinnerId = null;
   scoringAnimationActive = false;
   for (const [id] of gameState.players) gameState.roundWords.set(id, []);
@@ -302,6 +328,12 @@ function handlePlayerAction(playerId, action) {
     case 'restart':
       if (playerId !== gameState.hostPlayerId) return;
       resetGame(); gameState.phase = 'lobby'; broadcastAllPlayers(); return;
+    case 'set-config':
+      if (playerId !== gameState.hostPlayerId || gameState.phase !== 'lobby') return;
+      { const gs = parseInt(action.gridSize); if (gs >= 4 && gs <= 7) gameState.gridSize = gs; }
+      { const mr = parseInt(action.maxRounds); if (mr >= 1 && mr <= 20) gameState.maxRounds = mr; }
+      { const rd = parseInt(action.roundDuration); if (rd >= 30 && rd <= 300) gameState.roundDuration = rd; }
+      broadcastAllPlayers(); return;
     case 'submit-word':
       if (gameState.phase !== 'playing') return;
       handleWordSubmission(playerId, sanitize(action.word || '').toLowerCase().trim()); return;
@@ -493,7 +525,19 @@ function renderGameScreens() {
     case 'gameOver': renderGameOver(); break;
   }
 }
-function renderLobby() { renderLobbyPlayers(); updateHostControls(); }
+function renderLobby() {
+  renderLobbyPlayers();
+  updateHostControls();
+  // Sync selects to current gameState settings (in case another player changed them, or on first render)
+  if (myState) {
+    const gs = document.getElementById('cfg-grid-size');
+    const mr = document.getElementById('cfg-rounds');
+    const rd = document.getElementById('cfg-duration');
+    if (gs) gs.value = myState.gridSize || DEFAULT_GRID_SIZE;
+    if (mr) mr.value = myState.maxRounds || DEFAULT_MAX_ROUNDS;
+    if (rd) rd.value = myState.roundDuration || DEFAULT_ROUND_DURATION;
+  }
+}
 function renderLobbyPlayers() {
   const c = document.getElementById('lobby-player-list'); if (!c || !myState || !myState.players) return;
   c.innerHTML = '<div class="scoreboard">' + myState.players.map(p =>
@@ -526,20 +570,26 @@ function renderPlaying() {
 }
 function renderBoard() {
   const c = document.getElementById('board'); if (!myState || !myState.board || !c) return;
-  c.innerHTML = myState.board.flat().map((letter, idx) => '<div class="tile" data-idx="' + idx + '">' + letter + '</div>').join('');
+  const g = myState.board.length;
+  c.style.gridTemplateColumns = `repeat(${g}, 1fr)`;
+  c.innerHTML = myState.board.flat().map((letter, idx) => '<div class="tile' + (g >= 6 ? ' small' : '') + '" data-idx="' + idx + '">' + letter + '</div>').join('');
   updateBoardSelection();
   attachBoardEvents();
 }
 function getNeighborsFlat(idx) {
-  const r = Math.floor(idx / 4), col = idx % 4, n = [];
+  const g = (myState && myState.board) ? myState.board.length : 4;
+  const r = Math.floor(idx / g), col = idx % g, n = [];
   for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
     if (dr === 0 && dc === 0) continue;
     const nr = r + dr, nc = col + dc;
-    if (nr >= 0 && nr < 4 && nc >= 0 && nc < 4) n.push(nr * 4 + nc);
+    if (nr >= 0 && nr < g && nc >= 0 && nc < g) n.push(nr * g + nc);
   }
   return n;
 }
-function isAdjacentFlat(i1, i2) { return Math.abs(Math.floor(i1 / 4) - Math.floor(i2 / 4)) <= 1 && Math.abs((i1 % 4) - (i2 % 4)) <= 1; }
+function isAdjacentFlat(i1, i2) {
+  const g = (myState && myState.board) ? myState.board.length : 4;
+  return Math.abs(Math.floor(i1 / g) - Math.floor(i2 / g)) <= 1 && Math.abs((i1 % g) - (i2 % g)) <= 1;
+}
 function updateBoardSelection() {
   const tiles = document.querySelectorAll('#board .tile');
   tiles.forEach(t => t.classList.remove('selected', 'adjacent'));
@@ -777,8 +827,10 @@ function updateHostControls() {
   const isHP = isHostPlayer();
   const startBtn = document.getElementById('btn-start-game');
   const lobbyWait = document.getElementById('lobby-waiting-msg');
+  const configPanel = document.getElementById('game-config');
   if (startBtn) startBtn.style.display = isHP ? '' : 'none';
   if (lobbyWait) lobbyWait.style.display = isHP ? 'none' : '';
+  if (configPanel) configPanel.style.display = isHP ? '' : 'none';
   const roundControls = document.getElementById('roundend-host-controls');
   const roundWait = document.getElementById('roundend-waiting-msg');
   if (roundControls) roundControls.style.display = isHP ? '' : 'none';
@@ -844,6 +896,15 @@ function playFeedback(type) {
   if (nextBtn) nextBtn.addEventListener('click', () => handlePlayerAction(myPlayerId, { type: 'next-round' }));
   const againBtn = document.getElementById('btn-play-again');
   if (againBtn) againBtn.addEventListener('click', () => handlePlayerAction(myPlayerId, { type: 'restart' }));
+  function sendConfig() {
+    const gs = document.getElementById('cfg-grid-size');
+    const mr = document.getElementById('cfg-rounds');
+    const rd = document.getElementById('cfg-duration');
+    handlePlayerAction(myPlayerId, { type: 'set-config', gridSize: gs ? parseInt(gs.value) : 4, maxRounds: mr ? parseInt(mr.value) : 5, roundDuration: rd ? parseInt(rd.value) : 90 });
+  }
+  document.getElementById('cfg-grid-size')?.addEventListener('change', sendConfig);
+  document.getElementById('cfg-rounds')?.addEventListener('change', sendConfig);
+  document.getElementById('cfg-duration')?.addEventListener('change', sendConfig);
 })();
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
