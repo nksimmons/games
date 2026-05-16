@@ -209,26 +209,47 @@ function showResults() {
 
 // ── Input: tap/click on canvas ─────────────────────────────────────────
 function setupCanvasInput() {
-  function onTap(e) {
+  function getXY(e) {
+    const rect = canvas.getBoundingClientRect();
+    if (e.touches && e.touches.length > 0) {
+      return { cx: e.touches[0].clientX - rect.left, cy: e.touches[0].clientY - rect.top };
+    }
+    return { cx: e.clientX - rect.left, cy: e.clientY - rect.top };
+  }
+
+  // touchstart / mousedown:
+  //   • While hanging  → pump swing left or right based on which side was tapped
+  //   • While falling  → fire grapple toward tap point
+  function onDown(e) {
     if (gs.phase !== 'running') return;
     e.preventDefault();
-    const rect = canvas.getBoundingClientRect();
-    let cx, cy;
-    if (e.touches) {
-      cx = e.touches[0].clientX - rect.left;
-      cy = e.touches[0].clientY - rect.top;
-    } else {
-      cx = e.clientX - rect.left;
-      cy = e.clientY - rect.top;
-    }
+    const { cx, cy } = getXY(e);
     const player = gs.players[gs.currentPlayer];
     if (!player || !player.currentRun) return;
     const run = player.currentRun;
-    const camX = getCameraX(run, canvasWidth);
-    handleTap(run, cx, cy, canvasWidth, canvasHeight, camX);
+    if (run.state === 'reeling') {
+      // Left half = push left, right half = push right
+      handleSwingBoost(run, cx < canvasWidth / 2 ? -1 : 1);
+    } else {
+      const camX = getCameraX(run, canvasWidth);
+      handleTap(run, cx, cy, canvasWidth, canvasHeight, camX);
+    }
   }
-  canvas.addEventListener('touchstart', onTap, { passive: false });
-  canvas.addEventListener('mousedown', onTap);
+
+  // touchend / mouseup:
+  //   • While hanging → release the rope (detach at current swing momentum)
+  function onUp(e) {
+    if (gs.phase !== 'running') return;
+    const player = gs.players[gs.currentPlayer];
+    if (!player || !player.currentRun) return;
+    const run = player.currentRun;
+    if (run.state === 'reeling') handleReleaseAction(run);
+  }
+
+  canvas.addEventListener('touchstart', onDown, { passive: false });
+  canvas.addEventListener('mousedown',  onDown);
+  canvas.addEventListener('touchend',   onUp);
+  canvas.addEventListener('mouseup',    onUp);
 }
 
 // ── Add player form ────────────────────────────────────────────────────

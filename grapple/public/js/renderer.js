@@ -107,7 +107,12 @@ function drawWorld(ctx, run, cameraX, canvasWidth, canvasHeight, playerColor) {
   // 9. Player
   drawPlayer(ctx, run.px - cameraX, run.py, playerColor, run.dead);
 
-  // 10. HUD
+  // 10. Swing hint: semi-transparent arrows when hanging with little momentum
+  if (run.state === 'reeling' && Math.abs(run.angleVel) < 0.04) {
+    drawSwingHint(ctx, canvasWidth, canvasHeight);
+  }
+
+  // 11. HUD
   drawHUD(ctx, run, canvasWidth);
 }
 
@@ -364,6 +369,19 @@ function drawPlayer(ctx, sx, sy, color, dead) {
   ctx.arc(sx, sy - PLAYER_RADIUS + 4, 40, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = 1;
+}
+
+function drawSwingHint(ctx, canvasWidth, canvasHeight) {
+  const midY = canvasHeight * 0.5;
+  const alpha = 0.18 + 0.07 * Math.sin(Date.now() / 400);
+  // Left arrow zone
+  ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+  ctx.font = 'bold 40px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('◀', canvasWidth * 0.15, midY);
+  // Right arrow zone
+  ctx.fillText('▶', canvasWidth * 0.85, midY);
+  ctx.textAlign = 'left';
 }
 
 function drawHUD(ctx, run, canvasWidth) {

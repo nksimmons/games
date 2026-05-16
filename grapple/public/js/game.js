@@ -15,7 +15,7 @@
 //   - Run ends when player falls off the bottom of the tunnel.
 // =====================================================================
 
-const GRAVITY         = 0.5;    // px/frame²
+const GRAVITY         = 0.3;    // px/frame² (gentle, floaty feel)
 const RETRACT_SPEED   = 3.5;    // px/frame the rope shortens while held
 const MAX_ROPE        = 520;    // max initial rope length
 const MIN_ROPE        = 40;     // rope stops retracting at this length
@@ -24,6 +24,9 @@ const PLAYER_RADIUS   = 14;
 const BOLT_RADIUS     = 10;
 const PICKUP_RADIUS   = 12;
 const GRAPPLE_SPEED   = 22;     // px/frame for the flying hook
+const SWING_BOOST     = 0.03;   // angular velocity impulse per tap
+const MAX_SWING_SPEED = 0.15;   // rad/frame cap on angular velocity
+const TERMINAL_VY     = 10;     // max downward speed while falling
 
 // World geometry
 const CHUNK_WIDTH      = 700;
@@ -123,6 +126,7 @@ function createRunState(canvasWidth, canvasHeight) {
 
     grappleX: 0, grappleY: 0,
     grappleDX: 0, grappleDY: 0,
+    grappleStartX: 0, grappleStartY: 0,
 
     aimAngle: -Math.PI * 0.55,
 
@@ -165,12 +169,14 @@ function handleFireAction(run, angle) {
   if (run.ropeUses <= 0) return;
 
   run.ropeUses--;
-  run.state     = 'firing';
-  run.grappleX  = run.px;
-  run.grappleY  = run.py;
-  run.grappleDX = Math.cos(angle) * GRAPPLE_SPEED;
-  run.grappleDY = Math.sin(angle) * GRAPPLE_SPEED;
-  run.retracting = true;
+  run.state        = 'firing';
+  run.grappleX     = run.px;
+  run.grappleY     = run.py;
+  run.grappleStartX = run.px;
+  run.grappleStartY = run.py;
+  run.grappleDX    = Math.cos(angle) * GRAPPLE_SPEED;
+  run.grappleDY    = Math.sin(angle) * GRAPPLE_SPEED;
+  run.retracting   = true;
 }
 
 function handleReleaseAction(run) {
@@ -181,8 +187,8 @@ function handleReleaseAction(run) {
 }
 
 // Legacy tap (combined.html) — fires hook toward tap position
+// NOTE: does NOT handle 'reeling' state — combined.js dispatches that to handleSwingBoost.
 function handleTap(run, tapX, tapY, canvasWidth, canvasHeight, cameraX) {
-  if (run.state === 'reeling') { detach(run); return; }
   if (run.state === 'firing')  { run.state = 'falling'; run.ropeUses++; return; }
   if (run.ropeUses <= 0) return;
   const worldX = tapX + cameraX;
@@ -190,12 +196,22 @@ function handleTap(run, tapX, tapY, canvasWidth, canvasHeight, cameraX) {
   const dx = worldX - run.px, dy = worldY - run.py;
   const dist = Math.sqrt(dx * dx + dy * dy) || 1;
   run.ropeUses--;
-  run.state     = 'firing';
-  run.grappleX  = run.px;
-  run.grappleY  = run.py;
-  run.grappleDX = (dx / dist) * GRAPPLE_SPEED;
-  run.grappleDY = (dy / dist) * GRAPPLE_SPEED;
-  run.retracting = true;
+  run.state         = 'firing';
+  run.grappleX      = run.px;
+  run.grappleY      = run.py;
+  run.grappleStartX = run.px;
+  run.grappleStartY = run.py;
+  run.grappleDX     = (dx / dist) * GRAPPLE_SPEED;
+  run.grappleDY     = (dy / dist) * GRAPPLE_SPEED;
+  run.retracting    = true;
+}
+
+// Apply a lateral swing impulse while hanging.
+// direction: -1 = push left, +1 = push right
+function handleSwingBoost(run, direction) {
+  if (run.state !== 'reeling') return;
+  run.angleVel = Math.max(-MAX_SWING_SPEED,
+    Math.min(MAX_SWING_SPEED, run.angleVel + direction * SWING_BOOST));
 }
 
 // Attach hook to ceiling surface at (bx, by).
@@ -254,6 +270,7 @@ function stepPhysics(run, canvasWidth, canvasHeight) {
 
 function stepFalling(run) {
   run.vy += GRAVITY;
+  if (run.vy > TERMINAL_VY) run.vy = TERMINAL_VY;  // soft landing
   run.px += run.vx;
   run.py += run.vy;
   _clampTunnel(run);
@@ -277,8 +294,10 @@ function stepFiring(run) {
     return;
   }
 
-  // Cancel if hook flies too far without hitting anything
-  const gdx = run.grappleX - run.px, gdy = run.grappleY - run.py;
+  // Cancel if hook has traveled more than MAX_ROPE from its launch point.
+  // (Do NOT measure from current player position — gravity pulls the player
+  //  down while the hook flies up, inflating that distance prematurely.)
+  const gdx = run.grappleX - run.grappleStartX, gdy = run.grappleY - run.grappleStartY;
   const gDist = Math.sqrt(gdx * gdx + gdy * gdy);
   if (gDist > MAX_ROPE * 1.1) {
     run.state = 'falling';
