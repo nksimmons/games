@@ -13,22 +13,22 @@ let sendFn = null;
 
 // --- Device Identity (persistent across sessions) ---
 function getDeviceId() {
-  let id = localStorage.getItem('boggle-device-id');
+  let id = localStorage.getItem('lexitrack-device-id');
   if (!id) {
     id = crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2));
-    localStorage.setItem('boggle-device-id', id);
+    localStorage.setItem('lexitrack-device-id', id);
   }
   return id;
 }
 
 function saveProfile(name, avatar) {
-  localStorage.setItem('boggle-name', name);
-  localStorage.setItem('boggle-avatar', JSON.stringify(avatar));
+  localStorage.setItem('lexitrack-name', name);
+  localStorage.setItem('lexitrack-avatar', JSON.stringify(avatar));
 }
 
 function loadProfile() {
-  const name = localStorage.getItem('boggle-name');
-  const avatarStr = localStorage.getItem('boggle-avatar');
+  const name = localStorage.getItem('lexitrack-name');
+  const avatarStr = localStorage.getItem('lexitrack-avatar');
   let avatar = null;
   try { avatar = avatarStr ? JSON.parse(avatarStr) : null; } catch(e) {}
   return { name, avatar };
@@ -258,7 +258,7 @@ function connectWs() {
 
 // --- Trystero Connection (BitTorrent signaling — no server needed) ---
 function connectPeer(roomCode) {
-  playerPeer = new TrysteroPlayerPeer('nksimmons-boggle');
+  playerPeer = new TrysteroPlayerPeer('nksimmons-lexitrack');
 
   playerPeer.on('open', () => {
     const conn = playerPeer.connect(roomCode);

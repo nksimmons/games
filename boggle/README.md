@@ -1,6 +1,78 @@
-# Boggle Party 🎲
+# LexiTrack 🧩
 
-A no-backend browser multiplayer Boggle game inspired by Netflix Games' Boggle Party. One browser acts as host authority (board, timer, scoring), and players connect directly over WebRTC DataChannels.
+**LexiTrack** is an open-source, fast-paced word search game. Challenge your vocabulary by tracking paths through a grid of letters to find as many words as possible before the timer runs out.
+
+## ✨ Features
+
+* **Dynamic Grid:** Randomly generated letter grids (4×4 up to 7×7) for infinite replayability.
+* **Path Tracking:** Intuitive trace-to-select mechanics — drag across adjacent letters to form words.
+* **Multiplayer:** 2–8 players connect over WebRTC, no server required. Host controls the board, timer, and scoring.
+* **Shared-word penalty:** Words found by more than one player score zero — find the rare ones to pull ahead.
+* **Configurable rounds:** Host can tune grid size, number of rounds, and round duration before starting.
+* **Open Source:** Built for the community, by the community.
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+* Node.js v18+
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/nksimmons/games.git
+   cd games/boggle
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Run the game server:
+   ```bash
+   npm start
+   ```
+4. Open the host page in a browser and share the QR code with players.
+
+## 📜 How to Play
+
+1. The host starts a round — a grid of letters appears on every player's screen.
+2. Drag or click through **adjacent** letters (horizontal, vertical, or diagonal) to spell words.
+3. Words must be at least 3 letters and appear in the dictionary.
+4. Each letter may only be used once per word.
+5. Score points based on word length — longer words score more.
+6. Words found by multiple players cancel out (score 0 for both).
+7. After all rounds, the player with the most points wins.
+
+### Scoring
+
+| Word length | Points |
+|-------------|--------|
+| 3 letters | 1 |
+| 4 letters | 1 |
+| 5 letters | 2 |
+| 6 letters | 3 |
+| 7 letters | 5 |
+| 8+ letters | 11 |
+
+## Multiplayer Modes
+
+| Page | Purpose |
+|------|---------|
+| `public/combined.html` | Host + play on one device (recommended for mobile) |
+| `public/host.html` | Dedicated host screen — shows QR code for players to scan |
+| `public/player.html` | Player join page — scan QR code or follow link from host |
+
+Players connect peer-to-peer via [Trystero](https://github.com/dmotz/trystero) (Nostr WebRTC relay). No server needed for the GitHub Pages deployment.
+
+## ⚖️ Legal Disclaimer
+
+LexiTrack is an independent open-source project. It is a functional implementation of a word-grid game and is not affiliated with, sponsored by, or endorsed by Hasbro, Inc. or the Boggle brand.
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
+
 
 ## How It Works
 

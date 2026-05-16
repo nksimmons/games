@@ -870,7 +870,7 @@ function getLocalIP() {
 server.listen(PORT, '0.0.0.0', () => {
   const ip = getLocalIP();
   console.log('');
-  console.log('🎲 Boggle Party is running!');
+  console.log('🧩 LexiTrack is running!');
   console.log('');
   console.log(`  Landing page:     http://${ip}:${PORT}/`);
   console.log(`  Dedicated host:   http://${ip}:${PORT}/host`);

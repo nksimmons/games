@@ -66,21 +66,21 @@ let audioCtx = null;
 
 // ─── Identity ─────────────────────────────────────────────────────────────────
 function getDeviceId() {
-  let id = localStorage.getItem('boggle-device-id');
+  let id = localStorage.getItem('lexitrack-device-id');
   if (!id) {
     id = crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2));
-    localStorage.setItem('boggle-device-id', id);
+    localStorage.setItem('lexitrack-device-id', id);
   }
   return id;
 }
 function saveProfile(name, avatar) {
-  localStorage.setItem('boggle-name', name);
-  localStorage.setItem('boggle-avatar', JSON.stringify(avatar));
+  localStorage.setItem('lexitrack-name', name);
+  localStorage.setItem('lexitrack-avatar', JSON.stringify(avatar));
 }
 function loadProfile() {
-  const name = localStorage.getItem('boggle-name');
+  const name = localStorage.getItem('lexitrack-name');
   let avatar = null;
-  try { avatar = JSON.parse(localStorage.getItem('boggle-avatar') || 'null'); } catch {}
+  try { avatar = JSON.parse(localStorage.getItem('lexitrack-avatar') || 'null'); } catch {}
   return { name, avatar };
 }
 const deviceId = getDeviceId();
@@ -360,7 +360,7 @@ function showQrCode(url) {
   } catch (e) { console.warn('QR generation failed:', e); }
 }
 function initPeerHost() {
-  hostPeer = new TrysteroHostPeer('nksimmons-boggle');
+  hostPeer = new TrysteroHostPeer('nksimmons-lexitrack');
   hostPeer.on('open', (id) => {
     const playerUrl = buildPlayerUrl(id);
     showQrCode(playerUrl);

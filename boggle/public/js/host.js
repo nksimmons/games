@@ -598,7 +598,7 @@ async function initPeerHost() {
   });
 
   // Trystero signaling (BitTorrent trackers — no server needed)
-  hostPeer = new TrysteroHostPeer('nksimmons-boggle');
+  hostPeer = new TrysteroHostPeer('nksimmons-lexitrack');
 
   hostPeer.on('open', (id) => {
     const playerUrl = buildPlayerUrl(id);

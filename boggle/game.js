@@ -1,4 +1,4 @@
-// Classic Boggle dice (official 4x4 configuration)
+// Classic 4×4 letter dice
 const DICE_4x4 = [
   'AAEEGN', 'ABBJOO', 'ACHOPS', 'AFFKPS',
   'AOOTTW', 'CIMOTU', 'DEILRX', 'DELRVY',
@@ -6,7 +6,7 @@ const DICE_4x4 = [
   'EIOSST', 'ELRTTY', 'HIMNQU', 'HLNNRZ',
 ];
 
-// Super Big Boggle 5x5 dice
+// 5×5 extended letter dice
 const DICE_5x5 = [
   'AAAFRS', 'AAEEEE', 'AAFIRS', 'ADENNN', 'AEEEEM',
   'AEEGMU', 'AEGMNN', 'AFIRSY', 'BJKQXZ', 'CCENST',
