@@ -173,9 +173,9 @@ function selfJoin() {
   renderScreen();
 }
 
-// ── PeerJS host ───────────────────────────────────────────────────────
+// ── Trystero host ─────────────────────────────────────────────────────
 function initPeer() {
-  peer = new Peer();
+  peer = new TrysteroHostPeer('nksimmons-pente');
   peer.on('open', (id) => {
     showQrCode(buildPlayerUrl(id));
     document.getElementById('room-id').textContent = id;
@@ -193,6 +193,7 @@ function initPeer() {
       });
     });
   });
+  peer.on('error', err => console.warn('Trystero error:', err));
 }
 
 function buildPlayerUrl(peerId) {
