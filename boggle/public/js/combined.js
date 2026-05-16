@@ -858,7 +858,7 @@ function toast(text, type) {
   c.appendChild(el); setTimeout(() => el.remove(), 2500);
 }
 function playFeedback(type) {
-  if (navigator.vibrate) { if (type === 'success') navigator.vibrate([40, 30, 40]); else if (type === 'duplicate') navigator.vibrate(30); else navigator.vibrate(100); }
+  if (navigator.vibrate) { if (type === 'success') navigator.vibrate([60, 40, 80]); else if (type === 'duplicate') navigator.vibrate(50); else navigator.vibrate(200); }
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
