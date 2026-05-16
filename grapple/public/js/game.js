@@ -180,17 +180,14 @@ function handleReleaseAction(run) {
   if (run.state === 'firing')  { run.state = 'falling'; run.ropeUses++; } // refund
 }
 
-// Legacy tap (combined.html)
+// Legacy tap (combined.html) — fires hook toward tap position
 function handleTap(run, tapX, tapY, canvasWidth, canvasHeight, cameraX) {
   if (run.state === 'reeling') { detach(run); return; }
   if (run.state === 'firing')  { run.state = 'falling'; run.ropeUses++; return; }
   if (run.ropeUses <= 0) return;
   const worldX = tapX + cameraX;
   const worldY = tapY;
-  const target = nearestBolt(run, worldX, worldY);
-  if (!target) return;
-  const by = target.yFrac * run.canvasHeight;
-  const dx = target.x - run.px, dy = by - run.py;
+  const dx = worldX - run.px, dy = worldY - run.py;
   const dist = Math.sqrt(dx * dx + dy * dy) || 1;
   run.ropeUses--;
   run.state     = 'firing';
@@ -201,34 +198,27 @@ function handleTap(run, tapX, tapY, canvasWidth, canvasHeight, cameraX) {
   run.retracting = true;
 }
 
-function nearestBolt(run, worldX, worldY) {
-  let best = null, bestDist = Infinity;
-  for (const b of run.bolts) {
-    const by = b.yFrac * run.canvasHeight;
-    if (by >= run.py) continue;
-    const dx = b.x - run.px, dy = by - run.py;
-    const d = Math.sqrt(dx * dx + dy * dy);
-    if (d > MAX_ROPE) continue;
-    if (d < bestDist) { bestDist = d; best = b; }
-  }
-  return best;
-}
-
-function attachToBolt(run, bx, by) {
+// Attach hook to ceiling surface at (bx, by).
+// Pendulum convention: angle=0 → player directly below anchor.
+//   px = anchorX + sin(angle) * ropeLen
+//   py = anchorY + cos(angle) * ropeLen
+function attachToCeiling(run, bx, by) {
   run.state   = 'reeling';
   run.anchorX = bx;
   run.anchorY = by;
-  const dx = run.px - bx, dy = run.py - by;
+  const dx = run.px - bx, dy = run.py - by;  // dy > 0: player is below anchor
   run.ropeLen  = Math.min(MAX_ROPE, Math.max(MIN_ROPE, Math.sqrt(dx * dx + dy * dy)));
-  run.angle    = Math.atan2(dx, -dy);
-  run.angleVel = (run.vx * Math.cos(run.angle) + run.vy * Math.sin(run.angle)) / run.ropeLen;
+  run.angle    = Math.atan2(dx, dy);           // 0 = hanging straight down
+  // ω = (vx·cos θ − vy·sin θ) / L  (dot product of velocity with tangent)
+  run.angleVel = (run.vx * Math.cos(run.angle) - run.vy * Math.sin(run.angle)) / run.ropeLen;
   run.vx = 0; run.vy = 0;
 }
 
 function detach(run) {
   if (run.state !== 'reeling') return;
-  run.vx = run.angleVel * run.ropeLen * Math.cos(run.angle);
-  run.vy = run.angleVel * run.ropeLen * Math.sin(run.angle);
+  // vx =  ω·L·cos θ,  vy = −ω·L·sin θ  (tangential velocity)
+  run.vx =  run.angleVel * run.ropeLen * Math.cos(run.angle);
+  run.vy = -run.angleVel * run.ropeLen * Math.sin(run.angle);
   run.state = 'falling';
   run.retracting = false;
 }
@@ -280,21 +270,17 @@ function stepFiring(run) {
   run.grappleX += run.grappleDX;
   run.grappleY += run.grappleDY;
 
-  const hitR = BOLT_RADIUS + 10;
-  for (const b of run.bolts) {
-    const by = b.yFrac * run.canvasHeight;
-    const dx = run.grappleX - b.x, dy = run.grappleY - by;
-    if (Math.sqrt(dx * dx + dy * dy) < hitR) {
-      attachToBolt(run, b.x, by);
-      return;
-    }
+  // Attach when hook reaches the ceiling surface
+  const hookCeil = ceilAt(run, run.grappleX);
+  if (run.grappleY <= hookCeil) {
+    attachToCeiling(run, run.grappleX, hookCeil);
+    return;
   }
 
-  // Cancel if hook goes too far from player or past ceiling
+  // Cancel if hook flies too far without hitting anything
   const gdx = run.grappleX - run.px, gdy = run.grappleY - run.py;
   const gDist = Math.sqrt(gdx * gdx + gdy * gdy);
-  const hookCeil = ceilAt(run, run.grappleX);
-  if (gDist > MAX_ROPE * 1.1 || run.grappleY < hookCeil) {
+  if (gDist > MAX_ROPE * 1.1) {
     run.state = 'falling';
     run.ropeUses++; // refund missed shot
   }
@@ -315,8 +301,8 @@ function stepReeling(run) {
 
   run.angle += run.angleVel;
 
-  run.px = run.anchorX + Math.sin(run.angle)  * run.ropeLen;
-  run.py = run.anchorY - Math.cos(run.angle) * run.ropeLen;
+  run.px = run.anchorX + Math.sin(run.angle) * run.ropeLen;
+  run.py = run.anchorY + Math.cos(run.angle) * run.ropeLen;  // + = hang below
 
   // Ceiling bounce
   const localCeil = ceilAt(run, run.px);

@@ -34,9 +34,9 @@ function drawWorld(ctx, run, cameraX, canvasWidth, canvasHeight, playerColor) {
   const ceilMid = canvasHeight * 0.44;
   drawDistanceMarkers(ctx, cameraX, canvasWidth, ceilMid);
 
-  // 5. Bolts
+  // 5. Bolts (decorative ceiling anchors — drawn flush with ceiling surface)
   for (const b of run.bolts) {
-    const by = b.yFrac * canvasHeight;
+    const by = _tunnelYFromVerts(run.ceilVerts, b.x, canvasHeight);
     const sx = b.x - cameraX;
     if (sx < -30 || sx > canvasWidth + 30) continue;
     drawBolt(ctx, sx, by);
