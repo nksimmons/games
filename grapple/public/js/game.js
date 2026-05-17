@@ -17,8 +17,17 @@
 
 const GRAVITY         = 0.3;    // px/frame² (gentle, floaty feel)
 const RETRACT_SPEED   = 3.5;    // px/frame the rope shortens while held
-const MAX_ROPE        = 520;    // max initial rope length
 const MIN_ROPE        = 40;     // rope stops retracting at this length
+
+// Max rope scales with canvas height so the ceiling is always reachable
+// from the lower half of the tunnel on any screen size.
+// Tunnel spans ~80% of H in the worst case (floor at 88%, ceiling at 8%).
+// 0.87 gives ~9% diagonal slack while still requiring skill to reach
+// the very top from the floor — analogous to a Mario long-jump: you can
+// always cross the screen, but maximum height still takes timing.
+function maxRopeLen(canvasHeight) {
+  return Math.max(440, canvasHeight * 0.87);
+}
 const DAMPING         = 0.998;  // angular damping (very low — mine air)
 const PLAYER_RADIUS   = 14;
 const BOLT_RADIUS     = 10;
@@ -223,7 +232,7 @@ function attachToCeiling(run, bx, by) {
   run.anchorX = bx;
   run.anchorY = by;
   const dx = run.px - bx, dy = run.py - by;  // dy > 0: player is below anchor
-  run.ropeLen  = Math.min(MAX_ROPE, Math.max(MIN_ROPE, Math.sqrt(dx * dx + dy * dy)));
+  run.ropeLen  = Math.min(maxRopeLen(run.canvasHeight), Math.max(MIN_ROPE, Math.sqrt(dx * dx + dy * dy)));
   run.angle    = Math.atan2(dx, dy);           // 0 = hanging straight down
   // ω = (vx·cos θ − vy·sin θ) / L  (dot product of velocity with tangent)
   run.angleVel = (run.vx * Math.cos(run.angle) - run.vy * Math.sin(run.angle)) / run.ropeLen;
@@ -294,12 +303,12 @@ function stepFiring(run) {
     return;
   }
 
-  // Cancel if hook has traveled more than MAX_ROPE from its launch point.
+  // Cancel if hook has traveled more than maxRopeLen from its launch point.
   // (Do NOT measure from current player position — gravity pulls the player
   //  down while the hook flies up, inflating that distance prematurely.)
   const gdx = run.grappleX - run.grappleStartX, gdy = run.grappleY - run.grappleStartY;
   const gDist = Math.sqrt(gdx * gdx + gdy * gdy);
-  if (gDist > MAX_ROPE * 1.1) {
+  if (gDist > maxRopeLen(run.canvasHeight) * 1.1) {
     run.state = 'falling';
     run.ropeUses++; // refund missed shot
   }
