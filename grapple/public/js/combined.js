@@ -316,8 +316,135 @@ function setupButtons() {
   document.getElementById('btn-new-game').addEventListener('click', resetGames);
 }
 
+// ── Draw character modal ─────────────────────────────────────────────
+let _drawPlayerIdx = -1;
+let _drawCtx2d     = null;
+let _drawColor     = '#111111';
+let _drawLineWidth = 4;
+let _drawing       = false;
+let _lastDrawX     = 0, _lastDrawY = 0;
+
+function openDrawModal(playerIdx) {
+  _drawPlayerIdx = playerIdx;
+  document.getElementById('draw-modal').style.display = 'flex';
+  const canvas  = document.getElementById('draw-canvas');
+  _drawCtx2d    = canvas.getContext('2d');
+  _drawCtx2d.clearRect(0, 0, canvas.width, canvas.height);
+  const p = gs.players[playerIdx];
+  if (p.customSpriteDataUrl) {
+    const img = new Image();
+    img.onload = () => _drawCtx2d.drawImage(img, 0, 0);
+    img.src    = p.customSpriteDataUrl;
+  }
+  _drawColor     = '#111111';
+  _drawLineWidth = 4;
+  _updateDrawPaletteUI();
+}
+
+function closeDrawModal() {
+  document.getElementById('draw-modal').style.display = 'none';
+  _drawPlayerIdx = -1;
+}
+
+function saveDrawing() {
+  if (_drawPlayerIdx < 0) return;
+  const canvas  = document.getElementById('draw-canvas');
+  const dataUrl = canvas.toDataURL();
+  const player  = gs.players[_drawPlayerIdx];
+  player.customSpriteDataUrl = dataUrl;
+  const img = new Image();
+  img.onload = () => { player.customSprite = img; };
+  img.src    = dataUrl;
+  closeDrawModal();
+  renderSetup();
+}
+
+function setupDrawCanvas() {
+  const canvas = document.getElementById('draw-canvas');
+
+  function getPos(e) {
+    const rect   = canvas.getBoundingClientRect();
+    const scaleX = canvas.width  / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const src    = (e.touches && e.touches[0]) || e;
+    return { x: (src.clientX - rect.left) * scaleX, y: (src.clientY - rect.top) * scaleY };
+  }
+
+  function startDraw(e) {
+    e.preventDefault();
+    _drawing = true;
+    const { x, y } = getPos(e);
+    _lastDrawX = x; _lastDrawY = y;
+    if (_drawColor === 'erase') {
+      _drawCtx2d.globalCompositeOperation = 'destination-out';
+      _drawCtx2d.beginPath();
+      _drawCtx2d.arc(x, y, _drawLineWidth, 0, Math.PI * 2);
+      _drawCtx2d.fill();
+      _drawCtx2d.globalCompositeOperation = 'source-over';
+    } else {
+      _drawCtx2d.beginPath();
+      _drawCtx2d.arc(x, y, _drawLineWidth / 2, 0, Math.PI * 2);
+      _drawCtx2d.fillStyle = _drawColor;
+      _drawCtx2d.fill();
+    }
+  }
+
+  function moveDraw(e) {
+    if (!_drawing || !_drawCtx2d) return;
+    e.preventDefault();
+    const { x, y } = getPos(e);
+    if (_drawColor === 'erase') {
+      _drawCtx2d.globalCompositeOperation = 'destination-out';
+      _drawCtx2d.beginPath();
+      _drawCtx2d.arc(x, y, _drawLineWidth, 0, Math.PI * 2);
+      _drawCtx2d.fill();
+      _drawCtx2d.globalCompositeOperation = 'source-over';
+    } else {
+      _drawCtx2d.globalCompositeOperation = 'source-over';
+      _drawCtx2d.beginPath();
+      _drawCtx2d.moveTo(_lastDrawX, _lastDrawY);
+      _drawCtx2d.lineTo(x, y);
+      _drawCtx2d.strokeStyle = _drawColor;
+      _drawCtx2d.lineWidth   = _drawLineWidth;
+      _drawCtx2d.lineCap     = 'round';
+      _drawCtx2d.lineJoin    = 'round';
+      _drawCtx2d.stroke();
+    }
+    _lastDrawX = x; _lastDrawY = y;
+  }
+
+  function stopDraw() { _drawing = false; }
+
+  canvas.addEventListener('mousedown',  startDraw);
+  canvas.addEventListener('mousemove',  moveDraw);
+  canvas.addEventListener('mouseup',    stopDraw);
+  canvas.addEventListener('mouseleave', stopDraw);
+  canvas.addEventListener('touchstart', startDraw, { passive: false });
+  canvas.addEventListener('touchmove',  moveDraw,  { passive: false });
+  canvas.addEventListener('touchend',   stopDraw);
+
+  document.querySelectorAll('.draw-color-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _drawColor     = btn.dataset.color;
+      _drawLineWidth = _drawColor === 'erase' ? 18 : 4;
+      _updateDrawPaletteUI();
+    });
+  });
+
+  document.getElementById('draw-clear-btn').addEventListener('click', () => {
+    if (_drawCtx2d) _drawCtx2d.clearRect(0, 0, canvas.width, canvas.height);
+  });
+  document.getElementById('draw-cancel-btn').addEventListener('click', closeDrawModal);
+  document.getElementById('draw-save-btn').addEventListener('click',   saveDrawing);
+}
+
+function _updateDrawPaletteUI() {
+  document.querySelectorAll('.draw-color-btn').forEach(btn => {
+    btn.classList.toggle('draw-active', btn.dataset.color === _drawColor);
+  });
+}
+
 // ── Helpers ──────────────────────────────────────────────────
-function esc(str) {───────────
 function esc(str) {
   const el = document.createElement('span');
   el.textContent = str;
