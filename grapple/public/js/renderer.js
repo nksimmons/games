@@ -17,6 +17,10 @@ const HOOK_COLOR     = '#b0b8c0';  // metal hook
 const PICKUP_COLOR   = '#06d6a0';
 const PICKUP_GLOW    = '#80ffdb';
 const LANTERN_COLOR  = '#ffb347';
+const SPIKE_COLOR    = '#8a9caa';  // cold steel spikes
+const SPIKE_TIP      = '#d0dde6';
+const LAVA_COLOR     = '#ff4400';  // molten lava
+const LAVA_HOT       = '#ffaa00';
 
 // ── Main draw function ─────────────────────────────────────────────────
 function drawWorld(ctx, run, cameraX, canvasWidth, canvasHeight, playerColor) {
@@ -42,14 +46,8 @@ function drawWorld(ctx, run, cameraX, canvasWidth, canvasHeight, playerColor) {
     drawBolt(ctx, sx, by);
   }
 
-  // 6. Pickups
-  for (const p of run.pickups) {
-    if (p.collected) continue;
-    const py2 = p.yFrac * canvasHeight;
-    const sx = p.x - cameraX;
-    if (sx < -30 || sx > canvasWidth + 30) continue;
-    drawPickup(ctx, sx, py2, Date.now());
-  }
+  // 6. Hazards (spikes and lava on the floor)
+  drawHazards(ctx, run, cameraX, canvasWidth, canvasHeight);
 
   // 7. Rope / grapple line
   if (run.state === 'reeling') {
@@ -83,9 +81,9 @@ function drawWorld(ctx, run, cameraX, canvasWidth, canvasHeight, playerColor) {
     ctx.fill();
   }
 
-  // 8. Aim indicator (only while falling/free, with rope uses remaining)
+  // 8. Aim indicator (while falling/free)
   if ((run.state === 'falling' || run.state === 'firing') &&
-      typeof run.aimAngle === 'number' && run.ropeUses > 0) {
+      typeof run.aimAngle === 'number') {
     const px2 = run.px - cameraX;
     const aimLen = 180;
     const ex = px2 + Math.cos(run.aimAngle) * aimLen;
@@ -384,29 +382,76 @@ function drawSwingHint(ctx, canvasWidth, canvasHeight) {
   ctx.textAlign = 'left';
 }
 
-function drawHUD(ctx, run, canvasWidth) {
-  const pips  = run.ropeUses;
-  const pipR  = 7, gap = 20, startX = 14, pipY = 22;
-  for (let i = 0; i < Math.max(pips, 0); i++) {
+function drawHazards(ctx, run, cameraX, canvasWidth, canvasHeight) {
+  const now = Date.now();
+  for (const h of run.hazards) {
+    const sx = h.x - cameraX;
+    if (sx < -h.width - 20 || sx > canvasWidth + h.width + 20) continue;
+    const fy = _tunnelYFromVerts(run.floorVerts, h.x, canvasHeight);
+    if (h.type === 'spike') {
+      drawSpikes(ctx, sx, fy, h.width);
+    } else {
+      drawLava(ctx, sx, fy, h.width, now);
+    }
+  }
+}
+
+function drawSpikes(ctx, sx, fy, totalWidth) {
+  const count = Math.max(3, Math.round(totalWidth / 10));
+  const pitch = totalWidth / count;
+  const left  = sx - totalWidth / 2;
+  ctx.fillStyle = SPIKE_COLOR;
+  ctx.beginPath();
+  for (let i = 0; i < count; i++) {
+    const tx = left + i * pitch + pitch / 2;
+    ctx.moveTo(tx - pitch * 0.45, fy);
+    ctx.lineTo(tx, fy - SPIKE_HEIGHT);
+    ctx.lineTo(tx + pitch * 0.45, fy);
+  }
+  ctx.closePath();
+  ctx.fill();
+  // Bright tips
+  ctx.strokeStyle = SPIKE_TIP;
+  ctx.lineWidth = 1;
+  for (let i = 0; i < count; i++) {
+    const tx = left + i * pitch + pitch / 2;
     ctx.beginPath();
-    ctx.arc(startX + i * gap, pipY, pipR, 0, Math.PI * 2);
-    ctx.fillStyle = PICKUP_COLOR;
-    ctx.fill();
-    ctx.strokeStyle = PICKUP_GLOW;
-    ctx.lineWidth = 1.5;
+    ctx.moveTo(tx - 2, fy - SPIKE_HEIGHT + 5);
+    ctx.lineTo(tx, fy - SPIKE_HEIGHT);
+    ctx.lineTo(tx + 2, fy - SPIKE_HEIGHT + 5);
     ctx.stroke();
   }
-  if (pips > 0) {
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = '11px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText('grapples', startX + pips * gap + 6, pipY + 4);
-  } else {
-    ctx.fillStyle = 'rgba(255,80,80,0.7)';
-    ctx.font = '12px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText('no grapples!', startX, pipY + 4);
+}
+
+function drawLava(ctx, sx, fy, totalWidth, now) {
+  const left = sx - totalWidth / 2;
+  const pulse = 0.7 + 0.3 * Math.sin(now / 400);
+  // Outer glow
+  const grd = ctx.createLinearGradient(sx, fy - LAVA_HEIGHT - 20, sx, fy);
+  grd.addColorStop(0, 'rgba(255,100,0,0)');
+  grd.addColorStop(0.5, `rgba(255,100,0,${0.35 * pulse})`);
+  grd.addColorStop(1, `rgba(255,68,0,${0.6 * pulse})`);
+  ctx.fillStyle = grd;
+  ctx.fillRect(left - 10, fy - LAVA_HEIGHT - 20, totalWidth + 20, LAVA_HEIGHT + 20);
+  // Lava surface
+  ctx.fillStyle = LAVA_COLOR;
+  ctx.fillRect(left, fy - LAVA_HEIGHT, totalWidth, LAVA_HEIGHT);
+  // Hot bright stripe on top
+  ctx.fillStyle = LAVA_HOT;
+  ctx.fillRect(left, fy - LAVA_HEIGHT, totalWidth, 4);
+  // Bubbles
+  for (let i = 0; i < 3; i++) {
+    const bx = left + (i + 0.5) * (totalWidth / 3);
+    const br = 3 + 2 * Math.sin(now / 300 + i * 2.1);
+    const by = fy - LAVA_HEIGHT - br + 2 * Math.sin(now / 250 + i);
+    ctx.beginPath();
+    ctx.arc(bx, by, br, 0, Math.PI * 2);
+    ctx.fillStyle = LAVA_HOT;
+    ctx.fill();
   }
+}
+
+function drawHUD(ctx, run, canvasWidth) {
   // Distance readout
   const dist = Math.round(run.maxX / 10);
   ctx.fillStyle = 'rgba(255,255,255,0.6)';

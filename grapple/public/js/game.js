@@ -38,10 +38,11 @@ const MAX_SWING_SPEED = 0.15;   // rad/frame cap on angular velocity
 const TERMINAL_VY     = 5;      // max downward speed while falling (scaled to moon gravity)
 
 // World geometry
-const CHUNK_WIDTH      = 700;
-const BOLTS_PER_CHUNK  = 5;
-const PICKUPS_PER_CHUNK = 2;
+const CHUNK_WIDTH        = 700;
+const BOLTS_PER_CHUNK    = 5;
 const SEGMENTS_PER_CHUNK = 14;  // jagged ceiling/floor vertices per chunk
+const SPIKE_HEIGHT       = 28;  // how tall spike clusters protrude from floor
+const LAVA_HEIGHT        = 16;  // how tall lava pools sit above floor
 
 // ── Seeded pseudo-random ───────────────────────────────────────────────
 function seededRand(seed) {
@@ -83,17 +84,29 @@ function generateChunk(chunkIndex) {
     bolts.push({ x: bx, yFrac: bYFrac });
   }
 
-  // Pickups float in the mid-tunnel
-  const pickups = [];
-  for (let i = 0; i < PICKUPS_PER_CHUNK; i++) {
-    const s  = seededRand(chunkIndex * 8888 + i * 17 + 3);
-    const s2 = seededRand(chunkIndex * 8888 + i * 17 + 6);
-    const px2   = xStart + (i + 0.3 + s * 0.5) * (CHUNK_WIDTH / PICKUPS_PER_CHUNK);
-    const pyFrac = 0.48 + (s2 - 0.5) * 0.12;
-    pickups.push({ x: px2, yFrac: pyFrac, collected: false });
+  // Hazards on the floor — none in the first chunk (grace zone)
+  const hazards = [];
+  if (chunkIndex > 0) {
+    // 2–3 spike clusters
+    const nSpikes = 2 + (seededRand(chunkIndex * 7777 + 1) < 0.5 ? 1 : 0);
+    for (let i = 0; i < nSpikes; i++) {
+      const s  = seededRand(chunkIndex * 5555 + i * 31 + 7);
+      const s2 = seededRand(chunkIndex * 5555 + i * 31 + 11);
+      const hx = xStart + 60 + (i / nSpikes) * (CHUNK_WIDTH - 120) + s * (CHUNK_WIDTH / nSpikes) * 0.45;
+      const hw = 28 + s2 * 28;  // width 28–56 px
+      hazards.push({ type: 'spike', x: hx, width: hw });
+    }
+    // 0–1 lava pool (60% chance)
+    if (seededRand(chunkIndex * 3333 + 55) > 0.4) {
+      const s  = seededRand(chunkIndex * 3333 + 56);
+      const s2 = seededRand(chunkIndex * 3333 + 57);
+      const hx = xStart + 120 + s * (CHUNK_WIDTH - 240);
+      const hw = 70 + s2 * 70;  // width 70–140 px
+      hazards.push({ type: 'lava', x: hx, width: hw });
+    }
   }
 
-  return { ceilVerts, floorVerts, bolts, pickups };
+  return { ceilVerts, floorVerts, bolts, hazards };
 }
 
 // ── Tunnel geometry helpers ────────────────────────────────────────────
@@ -126,7 +139,6 @@ function createRunState(canvasWidth, canvasHeight) {
     vx: 2,  vy: 0,
 
     state: 'falling',   // 'falling' | 'firing' | 'reeling'
-    ropeUses: 5,
     retracting: false,
 
     anchorX: 0, anchorY: 0,
@@ -142,7 +154,7 @@ function createRunState(canvasWidth, canvasHeight) {
     ceilVerts: [],
     floorVerts: [],
     bolts: [],
-    pickups: [],
+    hazards: [],
     chunksGenerated: 0,
 
     maxX: 80,
@@ -165,7 +177,7 @@ function ensureChunks(run, canvasWidth, canvasHeight) {
       run.floorVerts.push(...chunk.floorVerts.slice(1));
     }
     run.bolts.push(...chunk.bolts);
-    run.pickups.push(...chunk.pickups);
+    run.hazards.push(...chunk.hazards);
     run.chunksGenerated++;
   }
 }
@@ -174,10 +186,7 @@ function ensureChunks(run, canvasWidth, canvasHeight) {
 function handleFireAction(run, angle) {
   if (run.dead) return;
   if (run.state === 'reeling') detach(run);
-  if (run.state === 'firing')  { run.state = 'falling'; run.ropeUses++; } // refund
-  if (run.ropeUses <= 0) return;
-
-  run.ropeUses--;
+  if (run.state === 'firing')  { run.state = 'falling'; } // cancel in-flight
   run.state        = 'firing';
   run.grappleX     = run.px;
   run.grappleY     = run.py;
@@ -192,19 +201,17 @@ function handleReleaseAction(run) {
   if (run.dead) return;
   run.retracting = false;
   if (run.state === 'reeling') detach(run);
-  if (run.state === 'firing')  { run.state = 'falling'; run.ropeUses++; } // refund
+  if (run.state === 'firing')  { run.state = 'falling'; }
 }
 
 // Legacy tap (combined.html) — fires hook toward tap position
 // NOTE: does NOT handle 'reeling' state — combined.js dispatches that to handleSwingBoost.
 function handleTap(run, tapX, tapY, canvasWidth, canvasHeight, cameraX) {
-  if (run.state === 'firing')  { run.state = 'falling'; run.ropeUses++; return; }
-  if (run.ropeUses <= 0) return;
+  if (run.state === 'firing')  { run.state = 'falling'; return; }
   const worldX = tapX + cameraX;
   const worldY = tapY;
   const dx = worldX - run.px, dy = worldY - run.py;
   const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-  run.ropeUses--;
   run.state         = 'firing';
   run.grappleX      = run.px;
   run.grappleY      = run.py;
@@ -260,21 +267,27 @@ function stepPhysics(run, canvasWidth, canvasHeight) {
     case 'reeling': stepReeling(run); break;
   }
 
-  // Pickups
-  for (const p of run.pickups) {
-    if (p.collected) continue;
-    const py2 = p.yFrac * canvasHeight;
-    const dx = run.px - p.x, dy = run.py - py2;
-    if (Math.sqrt(dx * dx + dy * dy) < PLAYER_RADIUS + PICKUP_RADIUS) {
-      p.collected = true;
-      run.ropeUses = Math.min(run.ropeUses + 2, 7);
+  // Hazard collision — touching spikes or lava is instant death
+  if (!run.dead) {
+    for (const h of run.hazards) {
+      if (Math.abs(run.px - h.x) > h.width / 2 + PLAYER_RADIUS + 20) continue;
+      if (Math.abs(run.px - h.x) < h.width / 2 + PLAYER_RADIUS) {
+        const hazardFloorY = floorAt(run, h.x);
+        const hazardTop = hazardFloorY - (h.type === 'spike' ? SPIKE_HEIGHT : LAVA_HEIGHT);
+        if (run.py > hazardTop - PLAYER_RADIUS) {
+          run.dead = true;
+          run.deathCause = h.type;
+          break;
+        }
+      }
     }
   }
 
   if (run.px > run.maxX) run.maxX = run.px;
 
+  // Safety net: fell completely off the bottom
   const localFloor = floorAt(run, run.px);
-  if (run.py > localFloor + PLAYER_RADIUS * 3) run.dead = true;
+  if (run.py > localFloor + PLAYER_RADIUS * 4) run.dead = true;
 }
 
 function stepFalling(run) {
@@ -310,7 +323,6 @@ function stepFiring(run) {
   const gDist = Math.sqrt(gdx * gdx + gdy * gdy);
   if (gDist > maxRopeLen(run.canvasHeight) * 1.1) {
     run.state = 'falling';
-    run.ropeUses++; // refund missed shot
   }
 }
 
@@ -361,7 +373,6 @@ function _clampTunnel(run) {
     run.py = localFloor - PLAYER_RADIUS;
     run.vy = 0;
     run.vx *= 0.80;
-    if (run.ropeUses <= 0 && Math.abs(run.vx) < 0.5) run.dead = true;
   }
 }
 

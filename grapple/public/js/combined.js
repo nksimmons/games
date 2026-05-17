@@ -5,7 +5,7 @@
 // Controls:
 //   - Tap / click to fire grapple toward nearest anchor ring above you
 //   - Tap again while swinging to release
-//   - Collect glowing green pickups to replenish rope uses
+//   - Avoid spikes and lava — touch them and you're done
 // =====================================================================
 
 const BG_COLORS   = ['#e63946','#457b9d','#2a9d8f','#e9c46a','#f4a261','#264653','#6a4c93','#1982c4'];
