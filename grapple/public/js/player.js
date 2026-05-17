@@ -13,6 +13,123 @@ let isHostPlayer = false;
 let state = null;
 let hasJoined = false;
 
+// ── Character customization state ────────────────────────────────────
+let charColor = '#e63946';
+let charSpriteDataUrl = null;
+
+// Draw modal
+let _drawCtx2d     = null;
+let _drawColor2    = '#111111';
+let _drawLineWidth = 4;
+let _drawing       = false;
+let _lastDX = 0, _lastDY = 0;
+
+function setupCharCustomization() {
+  const colorTrigger = document.getElementById('char-color-trigger');
+  const colorInput   = document.getElementById('char-color-input');
+  const drawBtn      = document.getElementById('char-draw-btn');
+
+  colorTrigger?.addEventListener('click', () => colorInput?.click());
+  colorInput?.addEventListener('input', e => {
+    charColor = e.target.value;
+    if (colorTrigger) colorTrigger.style.background = charColor;
+  });
+  drawBtn?.addEventListener('click', openDrawModal);
+
+  const canvas = document.getElementById('draw-canvas');
+  if (!canvas) return;
+
+  function getPos(e) {
+    const rect   = canvas.getBoundingClientRect();
+    const scaleX = canvas.width  / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const src    = (e.touches && e.touches[0]) || e;
+    return { x: (src.clientX - rect.left) * scaleX, y: (src.clientY - rect.top) * scaleY };
+  }
+  function startDraw(e) {
+    e.preventDefault(); _drawing = true;
+    const { x, y } = getPos(e);
+    _lastDX = x; _lastDY = y;
+    if (_drawColor2 === 'erase') {
+      _drawCtx2d.globalCompositeOperation = 'destination-out';
+      _drawCtx2d.beginPath(); _drawCtx2d.arc(x, y, _drawLineWidth, 0, Math.PI*2); _drawCtx2d.fill();
+      _drawCtx2d.globalCompositeOperation = 'source-over';
+    } else {
+      _drawCtx2d.beginPath(); _drawCtx2d.arc(x, y, _drawLineWidth/2, 0, Math.PI*2);
+      _drawCtx2d.fillStyle = _drawColor2; _drawCtx2d.fill();
+    }
+  }
+  function moveDraw(e) {
+    if (!_drawing) return; e.preventDefault();
+    const { x, y } = getPos(e);
+    if (_drawColor2 === 'erase') {
+      _drawCtx2d.globalCompositeOperation = 'destination-out';
+      _drawCtx2d.beginPath(); _drawCtx2d.arc(x, y, _drawLineWidth, 0, Math.PI*2); _drawCtx2d.fill();
+      _drawCtx2d.globalCompositeOperation = 'source-over';
+    } else {
+      _drawCtx2d.globalCompositeOperation = 'source-over';
+      _drawCtx2d.beginPath(); _drawCtx2d.moveTo(_lastDX, _lastDY); _drawCtx2d.lineTo(x, y);
+      _drawCtx2d.strokeStyle = _drawColor2; _drawCtx2d.lineWidth = _drawLineWidth;
+      _drawCtx2d.lineCap = 'round'; _drawCtx2d.lineJoin = 'round'; _drawCtx2d.stroke();
+    }
+    _lastDX = x; _lastDY = y;
+  }
+  function stopDraw() { _drawing = false; }
+  canvas.addEventListener('mousedown',  startDraw);
+  canvas.addEventListener('mousemove',  moveDraw);
+  canvas.addEventListener('mouseup',    stopDraw);
+  canvas.addEventListener('mouseleave', stopDraw);
+  canvas.addEventListener('touchstart', startDraw, { passive: false });
+  canvas.addEventListener('touchmove',  moveDraw,  { passive: false });
+  canvas.addEventListener('touchend',   stopDraw);
+
+  document.querySelectorAll('.draw-color-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _drawColor2    = btn.dataset.color;
+      _drawLineWidth = _drawColor2 === 'erase' ? 18 : 4;
+      document.querySelectorAll('.draw-color-btn').forEach(b =>
+        b.classList.toggle('draw-active', b.dataset.color === _drawColor2));
+    });
+  });
+  document.getElementById('draw-clear-btn')?.addEventListener('click', () =>
+    _drawCtx2d?.clearRect(0, 0, canvas.width, canvas.height));
+  document.getElementById('draw-cancel-btn')?.addEventListener('click', closeDrawModal);
+  document.getElementById('draw-save-btn')?.addEventListener('click', saveDrawing);
+}
+
+function openDrawModal() {
+  const modal  = document.getElementById('draw-modal');
+  const canvas = document.getElementById('draw-canvas');
+  if (!modal || !canvas) return;
+  _drawCtx2d = canvas.getContext('2d');
+  _drawCtx2d.clearRect(0, 0, canvas.width, canvas.height);
+  if (charSpriteDataUrl) {
+    const img = new Image();
+    img.onload = () => _drawCtx2d.drawImage(img, 0, 0);
+    img.src    = charSpriteDataUrl;
+  }
+  _drawColor2    = '#111111';
+  _drawLineWidth = 4;
+  document.querySelectorAll('.draw-color-btn').forEach(b =>
+    b.classList.toggle('draw-active', b.dataset.color === _drawColor2));
+  modal.style.display = 'flex';
+}
+
+function closeDrawModal() {
+  const modal = document.getElementById('draw-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function saveDrawing() {
+  const canvas = document.getElementById('draw-canvas');
+  if (!canvas) return;
+  charSpriteDataUrl = canvas.toDataURL();
+  // Update preview swatch with a tiny version
+  const trigger = document.getElementById('char-color-trigger');
+  if (trigger) trigger.style.backgroundImage = `url(${charSpriteDataUrl})`;
+  closeDrawModal();
+}
+
 // ── Device identity ───────────────────────────────────────────────────
 function getDeviceId() {
   let id = localStorage.getItem('grapple-device-id');
@@ -340,7 +457,20 @@ function setupJoinForm() {
     if (!name) { input?.focus(); return; }
     if (errEl) errEl.style.display = 'none';
     localStorage.setItem('grapple-name', name);
-    send({ type: 'join', name, deviceId });
+    // Scale sprite down to 64×64 before sending to keep payload small
+    let spriteDataUrl = null;
+    if (charSpriteDataUrl) {
+      try {
+        const off = document.createElement('canvas');
+        off.width = 64; off.height = 64;
+        const offCtx = off.getContext('2d');
+        const img = new Image();
+        img.src = charSpriteDataUrl;
+        offCtx.drawImage(img, 0, 0, 64, 64);
+        spriteDataUrl = off.toDataURL();
+      } catch(e) { spriteDataUrl = charSpriteDataUrl; }
+    }
+    send({ type: 'join', name, deviceId, color: charColor, spriteDataUrl });
     if (btn) btn.disabled = true;
   }
 
@@ -359,6 +489,7 @@ function setupButtons() {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────
+setupCharCustomization();
 setupJoinForm();
 setupGamepad();
 setupButtons();

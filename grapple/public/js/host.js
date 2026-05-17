@@ -189,14 +189,26 @@ function handleJoin(conn, msg) {
     return;
   }
 
-  const name = String(msg.name || 'Player').replace(/[<>&"']/g, '').slice(0, 16) || 'Player';
+  const name  = String(msg.name || 'Player').replace(/[<>&"']/g, '').slice(0, 16) || 'Player';
   const isHostPlayer = gs.players.filter(p => p.connected).length === 0;
-  const color = PLAYER_COLORS[gs.players.length % PLAYER_COLORS.length];
+  // Use player's chosen color if valid, else fall back to palette
+  const rawColor = String(msg.color || '');
+  const color = /^#[0-9a-fA-F]{6}$/.test(rawColor)
+    ? rawColor
+    : PLAYER_COLORS[gs.players.length % PLAYER_COLORS.length];
   const player = {
     name, color, bestDist: 0, currentRun: null,
     connected: true, peerId: conn.peer,
     isHostPlayer, deviceId: dId,
+    customSprite: null,
   };
+  // Load custom sprite if provided (data URL, already scaled to 64×64 by player)
+  const spriteUrl = String(msg.spriteDataUrl || '');
+  if (spriteUrl.startsWith('data:image/')) {
+    const img = new Image();
+    img.onload = () => { player.customSprite = img; };
+    img.src = spriteUrl;
+  }
   const myIdx = gs.players.length;
   gs.players.push(player);
   sendTo(conn, { type: 'joined', myIdx, isHostPlayer });
@@ -311,7 +323,12 @@ function gameLoop() {
 
   const camX = getCameraX(run, canvasWidth);
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-  drawWorld(ctx, run, camX, canvasWidth, canvasHeight, player.color);
+  drawWorld(ctx, run, camX, canvasWidth, canvasHeight, player.color, player.customSprite || null);
+
+  // Drain sounds
+  while (run.pendingSounds && run.pendingSounds.length) {
+    playSound(run.pendingSounds.shift());
+  }
 
   // Update sidebar live
   renderRunSidebar();

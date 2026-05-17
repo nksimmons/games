@@ -114,12 +114,22 @@
       </div>
       <p id="join-error" style="color:var(--accent);font-size:0.85rem;margin-top:0.4rem;display:none"></p>
     </div>
+    <div class="card" style="margin-bottom:1rem">
+      <h3 style="margin:0 0 0.6rem">Customize character</h3>
+      <div style="display:flex;align-items:center;gap:0.75rem">
+        <button id="char-color-trigger" class="player-swatch" style="background:#e63946" title="Pick color"></button>
+        <input type="color" id="char-color-input" class="hidden-color-input" value="#e63946">
+        <span style="font-size:0.9rem;color:var(--text-dim)">Color</span>
+        <button class="btn btn-sm" id="char-draw-btn" style="margin-left:auto">🎨 Draw character</button>
+      </div>
+      <p style="font-size:0.78rem;color:var(--text-dim);margin-top:0.4rem">Tap color to change • Tap 🎨 to draw a custom look</p>
+    </div>
     <div class="card" style="font-size:0.9rem;color:var(--text-dim)">
       <ul style="margin:0;padding-left:1.25rem;line-height:1.9">
         <li>Use the <strong>left stick</strong> to aim your grapple hook</li>
-        <li>Press and hold <strong>FIRE</strong> to shoot and latch on to a ring</li>
-        <li>Release <strong>FIRE</strong> to let go and fly through the air</li>
-        <li>Collect green pickups for extra grapples</li>
+        <li>Press and hold <strong>FIRE</strong> to shoot and latch</li>
+        <li>Release <strong>FIRE</strong> to let go and fly</li>
+        <li>Avoid the <span style="color:#ff6622">spikes</span> and <span style="color:#ff4400">lava</span> on the floor!</li>
       </ul>
     </div>
   </div>
@@ -207,6 +217,32 @@
 
   <script src="js/trystero-peer.js"></script>
 <script src="js/local-peer.js"></script>
+<script src="js/sounds.js"></script>
 <script src="js/player.js"></script>
+
+<!-- ── Draw Character Modal ── -->
+<div id="draw-modal" class="modal-overlay" style="display:none">
+  <div class="modal-card">
+    <h3 style="margin-bottom:0.3rem">🎨 Draw your character</h3>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:0.6rem">Draw on the canvas — clear areas are transparent in-game</p>
+    <canvas id="draw-canvas" width="240" height="240" class="draw-canvas"></canvas>
+    <div id="draw-palette">
+      <button class="draw-color-btn draw-active" data-color="#111111" style="background:#111"></button>
+      <button class="draw-color-btn" data-color="#ffffff" style="background:#fff;border:1px solid #bbb"></button>
+      <button class="draw-color-btn" data-color="#e63946" style="background:#e63946"></button>
+      <button class="draw-color-btn" data-color="#457b9d" style="background:#457b9d"></button>
+      <button class="draw-color-btn" data-color="#2a9d8f" style="background:#2a9d8f"></button>
+      <button class="draw-color-btn" data-color="#f4a261" style="background:#f4a261"></button>
+      <button class="draw-color-btn" data-color="#6a4c93" style="background:#6a4c93"></button>
+      <button class="draw-color-btn" data-color="erase" style="background:#e8e0d0;font-size:0.65rem;font-weight:700;color:#555">eraser</button>
+    </div>
+    <div style="display:flex;gap:0.5rem;margin-top:0.75rem;align-items:center">
+      <button class="btn btn-sm" id="draw-clear-btn">🗑 Clear</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-sm" id="draw-cancel-btn">Cancel</button>
+      <button class="btn btn-sm btn-success" id="draw-save-btn">✓ Save</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
