@@ -70,14 +70,31 @@ function renderSetup() {
   if (!list) return;
   list.innerHTML = gs.players.map((p, i) => `
     <div class="player-setup-row">
-      <div class="player-swatch" style="background:${p.color}"></div>
+      <button class="player-swatch color-pick-trigger" style="background:${p.color}" data-idx="${i}" title="Pick color"></button>
+      <input type="color" id="color-pick-${i}" class="hidden-color-input" value="${p.color}" data-idx="${i}">
+      ${p.customSpriteDataUrl ? `<img class="sprite-thumb" src="${p.customSpriteDataUrl}" alt="">` : ''}
       <span class="player-setup-name">${esc(p.name)}</span>
+      <button class="btn btn-sm draw-char-btn" data-idx="${i}" title="Draw character">🎨</button>
       <button class="btn btn-sm remove-player-btn" data-idx="${i}">✕</button>
     </div>
   `).join('');
   list.querySelectorAll('.remove-player-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       gs.players.splice(Number(btn.dataset.idx), 1);
+      renderSetup();
+    });
+  });
+  list.querySelectorAll('.draw-char-btn').forEach(btn => {
+    btn.addEventListener('click', () => openDrawModal(Number(btn.dataset.idx)));
+  });
+  list.querySelectorAll('.color-pick-trigger').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById(`color-pick-${btn.dataset.idx}`).click();
+    });
+  });
+  list.querySelectorAll('.hidden-color-input').forEach(input => {
+    input.addEventListener('input', e => {
+      gs.players[Number(e.target.dataset.idx)].color = e.target.value;
       renderSetup();
     });
   });
@@ -163,10 +180,15 @@ function gameLoop() {
     ensureChunks(run, canvasWidth, canvasHeight);
   }
 
+  // Drain pending sounds from physics engine
+  while (run.pendingSounds && run.pendingSounds.length) {
+    playSound(run.pendingSounds.shift());
+  }
+
   // Draw
   const camX = getCameraX(run, canvasWidth);
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-  drawWorld(ctx, run, camX, canvasWidth, canvasHeight, player.color);
+  drawWorld(ctx, run, camX, canvasWidth, canvasHeight, player.color, player.customSprite || null);
 
   // Check run end
   if (run.dead) {
@@ -294,7 +316,8 @@ function setupButtons() {
   document.getElementById('btn-new-game').addEventListener('click', resetGames);
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────
+function esc(str) {───────────
 function esc(str) {
   const el = document.createElement('span');
   el.textContent = str;
@@ -319,5 +342,6 @@ initCanvas();
 setupCanvasInput();
 setupAddPlayer();
 setupButtons();
+setupDrawCanvas();
 renderScreen();
 showQrCode(window.location.href);

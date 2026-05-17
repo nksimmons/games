@@ -30,8 +30,6 @@ function maxRopeLen(canvasHeight) {
 }
 const DAMPING         = 0.998;  // angular damping (very low — mine air)
 const PLAYER_RADIUS   = 14;
-const BOLT_RADIUS     = 10;
-const PICKUP_RADIUS   = 12;
 const GRAPPLE_SPEED   = 22;     // px/frame for the flying hook
 const SWING_BOOST     = 0.03;   // angular velocity impulse per tap
 const MAX_SWING_SPEED = 0.15;   // rad/frame cap on angular velocity
@@ -39,7 +37,6 @@ const TERMINAL_VY     = 5;      // max downward speed while falling (scaled to m
 
 // World geometry
 const CHUNK_WIDTH        = 700;
-const BOLTS_PER_CHUNK    = 5;
 const SEGMENTS_PER_CHUNK = 14;  // jagged ceiling/floor vertices per chunk
 const SPIKE_HEIGHT       = 28;  // how tall spike clusters protrude from floor
 const LAVA_HEIGHT        = 16;  // how tall lava pools sit above floor
@@ -74,15 +71,7 @@ function generateChunk(chunkIndex) {
     floorVerts.push({ x: xStart + i * segW, yFrac: fv });
   }
 
-  // Bolts embedded in the ceiling
-  const bolts = [];
-  for (let i = 0; i < BOLTS_PER_CHUNK; i++) {
-    const s  = seededRand(chunkIndex * 9999 + i * 13 + 2);
-    const s2 = seededRand(chunkIndex * 9999 + i * 13 + 5);
-    const bx    = xStart + (i + 0.2 + s * 0.6) * (CHUNK_WIDTH / BOLTS_PER_CHUNK);
-    const bYFrac = CEIL_BASE + 0.04 + s2 * 0.06;
-    bolts.push({ x: bx, yFrac: bYFrac });
-  }
+  // No bolts — grapple attaches directly to the ceiling rock surface
 
   // Hazards on the floor — none in the first chunk (grace zone)
   const hazards = [];
@@ -106,7 +95,7 @@ function generateChunk(chunkIndex) {
     }
   }
 
-  return { ceilVerts, floorVerts, bolts, hazards };
+  return { ceilVerts, floorVerts, hazards };
 }
 
 // ── Tunnel geometry helpers ────────────────────────────────────────────
@@ -153,9 +142,10 @@ function createRunState(canvasWidth, canvasHeight) {
 
     ceilVerts: [],
     floorVerts: [],
-    bolts: [],
     hazards: [],
     chunksGenerated: 0,
+
+    pendingSounds: [],
 
     maxX: 80,
     dead: false,
@@ -176,7 +166,6 @@ function ensureChunks(run, canvasWidth, canvasHeight) {
       run.ceilVerts.push(...chunk.ceilVerts.slice(1));
       run.floorVerts.push(...chunk.floorVerts.slice(1));
     }
-    run.bolts.push(...chunk.bolts);
     run.hazards.push(...chunk.hazards);
     run.chunksGenerated++;
   }
@@ -220,6 +209,7 @@ function handleTap(run, tapX, tapY, canvasWidth, canvasHeight, cameraX) {
   run.grappleDX     = (dx / dist) * GRAPPLE_SPEED;
   run.grappleDY     = (dy / dist) * GRAPPLE_SPEED;
   run.retracting    = true;
+  run.pendingSounds.push('fire');
 }
 
 // Apply a lateral swing impulse while hanging.
@@ -244,6 +234,7 @@ function attachToCeiling(run, bx, by) {
   // ω = (vx·cos θ − vy·sin θ) / L  (dot product of velocity with tangent)
   run.angleVel = (run.vx * Math.cos(run.angle) - run.vy * Math.sin(run.angle)) / run.ropeLen;
   run.vx = 0; run.vy = 0;
+  run.pendingSounds.push('attach');
 }
 
 function detach(run) {
@@ -253,6 +244,7 @@ function detach(run) {
   run.vy = -run.angleVel * run.ropeLen * Math.sin(run.angle);
   run.state = 'falling';
   run.retracting = false;
+  run.pendingSounds.push('release');
 }
 
 // ── Physics steps ─────────────────────────────────────────────────────
@@ -277,6 +269,7 @@ function stepPhysics(run, canvasWidth, canvasHeight) {
         if (run.py > hazardTop - PLAYER_RADIUS) {
           run.dead = true;
           run.deathCause = h.type;
+          run.pendingSounds.push('death');
           break;
         }
       }
@@ -287,7 +280,10 @@ function stepPhysics(run, canvasWidth, canvasHeight) {
 
   // Safety net: fell completely off the bottom
   const localFloor = floorAt(run, run.px);
-  if (run.py > localFloor + PLAYER_RADIUS * 4) run.dead = true;
+  if (run.py > localFloor + PLAYER_RADIUS * 4) {
+    run.dead = true;
+    run.pendingSounds.push('death');
+  }
 }
 
 function stepFalling(run) {

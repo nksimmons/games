@@ -10,12 +10,8 @@ const CEIL_EDGE      = '#5a4228';  // bright edge of ceiling (cave roof)
 const FLOOR_COLOR    = '#2a1f11';  // floor rock
 const FLOOR_EDGE     = '#4a3520';  // floor top edge
 const TUNNEL_BG      = '#0f0c08';  // tunnel interior background
-const BOLT_COLOR     = '#c0a060';  // old brass bolt
-const BOLT_GLOW      = '#ffd166';
 const ROPE_COLOR     = '#d4b896';  // hemp/manila rope
 const HOOK_COLOR     = '#b0b8c0';  // metal hook
-const PICKUP_COLOR   = '#06d6a0';
-const PICKUP_GLOW    = '#80ffdb';
 const LANTERN_COLOR  = '#ffb347';
 const SPIKE_COLOR    = '#8a9caa';  // cold steel spikes
 const SPIKE_TIP      = '#d0dde6';
@@ -23,7 +19,7 @@ const LAVA_COLOR     = '#ff4400';  // molten lava
 const LAVA_HOT       = '#ffaa00';
 
 // ── Main draw function ─────────────────────────────────────────────────
-function drawWorld(ctx, run, cameraX, canvasWidth, canvasHeight, playerColor) {
+function drawWorld(ctx, run, cameraX, canvasWidth, canvasHeight, playerColor, playerSprite) {
   // 1. Fill the tunnel interior
   ctx.fillStyle = TUNNEL_BG;
   ctx.fillRect(0, 0, canvasWidth, canvasHeight);
@@ -38,18 +34,10 @@ function drawWorld(ctx, run, cameraX, canvasWidth, canvasHeight, playerColor) {
   const ceilMid = canvasHeight * 0.44;
   drawDistanceMarkers(ctx, cameraX, canvasWidth, ceilMid);
 
-  // 5. Bolts (decorative ceiling anchors — drawn flush with ceiling surface)
-  for (const b of run.bolts) {
-    const by = _tunnelYFromVerts(run.ceilVerts, b.x, canvasHeight);
-    const sx = b.x - cameraX;
-    if (sx < -30 || sx > canvasWidth + 30) continue;
-    drawBolt(ctx, sx, by);
-  }
-
-  // 6. Hazards (spikes and lava on the floor)
+  // 5. Hazards (spikes and lava on the floor)
   drawHazards(ctx, run, cameraX, canvasWidth, canvasHeight);
 
-  // 7. Rope / grapple line
+  // 6. Rope / grapple line
   if (run.state === 'reeling') {
     const ax = run.anchorX - cameraX;
     ctx.beginPath();
@@ -59,7 +47,7 @@ function drawWorld(ctx, run, cameraX, canvasWidth, canvasHeight, playerColor) {
     ctx.lineWidth = 3;
     ctx.setLineDash([]);
     ctx.stroke();
-    // Hook endpoint (at bolt — already drawn, just draw small circle where rope meets bolt)
+    // Hook tip where rope meets ceiling
     ctx.beginPath();
     ctx.arc(ax, run.anchorY, 5, 0, Math.PI * 2);
     ctx.fillStyle = HOOK_COLOR;
@@ -103,7 +91,7 @@ function drawWorld(ctx, run, cameraX, canvasWidth, canvasHeight, playerColor) {
   }
 
   // 9. Player
-  drawPlayer(ctx, run.px - cameraX, run.py, playerColor, run.dead);
+  drawPlayer(ctx, run.px - cameraX, run.py, playerColor, run.dead, playerSprite);
 
   // 10. Swing hint: semi-transparent arrows when hanging with little momentum
   if (run.state === 'reeling' && Math.abs(run.angleVel) < 0.04) {
@@ -276,64 +264,18 @@ function drawDistanceMarkers(ctx, cameraX, canvasWidth, midY) {
   }
 }
 
-function drawBolt(ctx, sx, sy) {
-  // Ceiling bolt: small metal ring
-  const grd = ctx.createRadialGradient(sx, sy, 1, sx, sy, BOLT_RADIUS * 2);
-  grd.addColorStop(0, 'rgba(255,209,102,0.4)');
-  grd.addColorStop(1, 'rgba(255,209,102,0)');
-  ctx.fillStyle = grd;
-  ctx.beginPath();
-  ctx.arc(sx, sy, BOLT_RADIUS * 2, 0, Math.PI * 2);
-  ctx.fill();
-  // Bolt body
-  ctx.beginPath();
-  ctx.arc(sx, sy, BOLT_RADIUS, 0, Math.PI * 2);
-  ctx.fillStyle = BOLT_COLOR;
-  ctx.fill();
-  ctx.strokeStyle = BOLT_GLOW;
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  // Center dot
-  ctx.beginPath();
-  ctx.arc(sx, sy, 3, 0, Math.PI * 2);
-  ctx.fillStyle = '#2a1a00';
-  ctx.fill();
-}
+function drawBolt() { /* removed — grapple attaches to ceiling surface directly */ }
+function drawPickup() { /* removed — pickups replaced by hazards */ }
 
-function drawPickup(ctx, sx, sy, now) {
-  const bob = Math.sin(now / 500) * 4;
-  const cy  = sy + bob;
-
-  const grd = ctx.createRadialGradient(sx, cy, 2, sx, cy, PICKUP_RADIUS * 2.5);
-  grd.addColorStop(0, 'rgba(6,214,160,0.45)');
-  grd.addColorStop(1, 'rgba(6,214,160,0)');
-  ctx.fillStyle = grd;
-  ctx.beginPath();
-  ctx.arc(sx, cy, PICKUP_RADIUS * 2.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.save();
-  ctx.translate(sx, cy);
-  ctx.rotate(now / 1200);
-  ctx.beginPath();
-  const outerR = PICKUP_RADIUS, innerR = outerR * 0.42;
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 - Math.PI / 4;
-    const r = i % 2 === 0 ? outerR : innerR;
-    if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
-    else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
-  }
-  ctx.closePath();
-  ctx.fillStyle = PICKUP_COLOR;
-  ctx.fill();
-  ctx.strokeStyle = PICKUP_GLOW;
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawPlayer(ctx, sx, sy, color, dead) {
+function drawPlayer(ctx, sx, sy, color, dead, sprite) {
   ctx.globalAlpha = dead ? 0.45 : 1.0;
+  if (sprite && sprite.complete && sprite.naturalWidth > 0) {
+    const sz = PLAYER_RADIUS * 2.6;
+    ctx.drawImage(sprite, sx - sz / 2, sy - sz / 2, sz, sz);
+    ctx.globalAlpha = 1;
+    return;
+  }
+  // Default circle character
   // Shadow on floor
   ctx.beginPath();
   ctx.ellipse(sx, sy + PLAYER_RADIUS - 2, PLAYER_RADIUS * 0.7, PLAYER_RADIUS * 0.2, 0, 0, Math.PI * 2);

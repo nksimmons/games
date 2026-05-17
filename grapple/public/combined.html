@@ -93,7 +93,33 @@
   </div>
 </div>
 
+<!-- ── Draw Character Modal ── -->
+<div id="draw-modal" class="modal-overlay" style="display:none">
+  <div class="modal-card">
+    <h3 style="margin-bottom:0.3rem">🎨 Draw your character</h3>
+    <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:0.6rem">Draw on the canvas — clear areas are transparent in-game</p>
+    <canvas id="draw-canvas" width="240" height="240" class="draw-canvas"></canvas>
+    <div id="draw-palette">
+      <button class="draw-color-btn draw-active" data-color="#111111" style="background:#111"></button>
+      <button class="draw-color-btn" data-color="#ffffff" style="background:#fff;border:1px solid #bbb"></button>
+      <button class="draw-color-btn" data-color="#e63946" style="background:#e63946"></button>
+      <button class="draw-color-btn" data-color="#457b9d" style="background:#457b9d"></button>
+      <button class="draw-color-btn" data-color="#2a9d8f" style="background:#2a9d8f"></button>
+      <button class="draw-color-btn" data-color="#f4a261" style="background:#f4a261"></button>
+      <button class="draw-color-btn" data-color="#6a4c93" style="background:#6a4c93"></button>
+      <button class="draw-color-btn" data-color="erase" style="background:#e8e0d0;font-size:0.65rem;font-weight:700;color:#555">eraser</button>
+    </div>
+    <div style="display:flex;gap:0.5rem;margin-top:0.75rem;align-items:center">
+      <button class="btn btn-sm" id="draw-clear-btn">🗑 Clear</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-sm" id="draw-cancel-btn">Cancel</button>
+      <button class="btn btn-sm btn-success" id="draw-save-btn">✓ Save</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="js/sounds.js"></script>
 <script src="js/game.js"></script>
 <script src="js/renderer.js"></script>
 <script src="js/combined.js"></script>
