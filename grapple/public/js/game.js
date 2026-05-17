@@ -15,8 +15,8 @@
 //   - Run ends when player falls off the bottom of the tunnel.
 // =====================================================================
 
-const GRAVITY         = 0.3;    // px/frame² (gentle, floaty feel)
-const RETRACT_SPEED   = 3.5;    // px/frame the rope shortens while held
+const GRAVITY         = 0.05;   // px/frame² (moon gravity: ~1/6 of Earth)
+const RETRACT_SPEED   = 1.8;    // px/frame the rope shortens while held (leisurely climb)
 const MIN_ROPE        = 40;     // rope stops retracting at this length
 
 // Max rope scales with canvas height so the ceiling is always reachable
@@ -35,7 +35,7 @@ const PICKUP_RADIUS   = 12;
 const GRAPPLE_SPEED   = 22;     // px/frame for the flying hook
 const SWING_BOOST     = 0.03;   // angular velocity impulse per tap
 const MAX_SWING_SPEED = 0.15;   // rad/frame cap on angular velocity
-const TERMINAL_VY     = 10;     // max downward speed while falling
+const TERMINAL_VY     = 5;      // max downward speed while falling (scaled to moon gravity)
 
 // World geometry
 const CHUNK_WIDTH      = 700;
