@@ -1,0 +1,13 @@
+{
+  "name": "litter-run",
+  "version": "1.0.0",
+  "description": "Litter Run — cat zoomies party game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2"
+  }
+}

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Litter Run — Player</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* ── Player phone layout ── */
+    body { overscroll-behavior: none; touch-action: none; }
+
+    /* Color swatches */
+    .color-swatch-row { display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.4rem; }
+    .color-swatch     { width:32px; height:32px; border-radius:50%; border:3px solid transparent; cursor:pointer; transition:transform 0.1s; }
+    .color-swatch.selected { border-color:#fff; box-shadow:0 0 0 2px #888; transform:scale(1.18); }
+
+    /* Player HUD */
+    .player-hud { display:flex; gap:1.25rem; justify-content:center; padding:0.6rem 1rem; background:rgba(0,0,0,0.55); backdrop-filter:blur(4px); }
+    .hud-block  { text-align:center; }
+    .hud-label  { font-size:0.68rem; color:rgba(255,255,255,0.6); text-transform:uppercase; letter-spacing:0.07em; }
+    .hud-value  { font-size:1.5rem; font-weight:800; color:#fff; }
+    #hud-damage { color:#f4845f; }
+    #hud-time   { color:#ffd166; }
+
+    /* Joystick */
+    #screen-game-player { background:#111; display:flex; flex-direction:column; }
+    #joystick-zone { flex:1; display:flex; align-items:center; justify-content:center; cursor:pointer; user-select:none; position:relative; }
+    .stick-base { width:160px; height:160px; border-radius:50%; background:rgba(255,255,255,0.08); border:2px solid rgba(255,255,255,0.15); position:relative; }
+    #stick-knob { width:72px; height:72px; border-radius:50%; background:var(--accent,#f4845f); position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); box-shadow:0 4px 16px rgba(0,0,0,0.4); transition:transform 0.04s linear; }
+    .stick-hint { font-size:0.78rem; color:rgba(255,255,255,0.35); text-align:center; margin-top:0.9rem; }
+
+    /* Watching overlay */
+    #watching-overlay { display:none; position:absolute; inset:0; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,0.7); gap:0.4rem; }
+    .watching-label { font-size:0.88rem; color:rgba(255,255,255,0.6); }
+    #watching-name  { font-size:2rem; font-weight:800; color:#fff; }
+    .watching-sub   { font-size:0.82rem; color:rgba(255,255,255,0.5); }
+
+    /* Countdown overlay (player) */
+    #countdown-overlay-p { display:none; position:absolute; inset:0; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,0.72); gap:0.5rem; pointer-events:none; }
+    #countdown-num       { font-size:6rem; font-weight:900; color:var(--accent,#f4845f); line-height:1; }
+    #p-countdown-who     { font-size:1.3rem; font-weight:700; color:#fff; }
+
+    /* Round over overlay (player) */
+    #roundover-overlay-p { display:none; position:absolute; inset:0; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,0.78); gap:0.5rem; pointer-events:none; }
+
+    /* Scores */
+    .score-row    { display:flex; align-items:center; gap:0.8rem; padding:0.75rem 1rem; border-radius:10px; font-size:1.1rem; background:var(--card-bg); margin-bottom:0.5rem; }
+    .score-row.winner { border:2px solid var(--accent); font-size:1.2rem; }
+    .score-rank   { font-size:1.5rem; min-width:2rem; text-align:center; }
+    .score-name   { flex:1; font-weight:700; }
+    .score-damage { font-weight:800; color:#e63946; }
+
+    /* Join error */
+    #join-error { display:none; color:#e63946; font-size:0.88rem; margin-top:0.4rem; }
+
+    /* All done player */
+    #screen-alldone-player { overflow-y:auto; }
+  </style>
+</head>
+<body>
+
+<!-- ── No room ────────────────────────────────────────────────────── -->
+<div id="screen-no-room" class="screen">
+  <div class="container" style="padding-top:3rem;text-align:center">
+    <div class="card">
+      <h2>🐱 Litter Run</h2>
+      <p style="color:var(--text-dim)">No room ID found. Scan the QR code on the host screen to join.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── Join / Lobby ───────────────────────────────────────────────── -->
+<div id="screen-join" class="screen active">
+  <div class="container" style="padding-top:1.5rem">
+    <h2 class="game-title" style="font-size:1.6rem;margin-bottom:1rem">🐱 Litter Run</h2>
+
+    <div class="card">
+      <label class="form-label" for="input-name">Your name</label>
+      <input id="input-name" class="form-input" type="text"
+             placeholder="Enter name…" maxlength="16" autocomplete="off">
+      <div id="join-error"></div>
+
+      <label class="form-label" style="margin-top:0.9rem">Pick a color</label>
+      <div class="color-swatch-row">
+        <div class="color-swatch" data-color="#e63946" style="background:#e63946"></div>
+        <div class="color-swatch" data-color="#457b9d" style="background:#457b9d"></div>
+        <div class="color-swatch" data-color="#2a9d8f" style="background:#2a9d8f"></div>
+        <div class="color-swatch" data-color="#e9c46a" style="background:#e9c46a"></div>
+        <div class="color-swatch" data-color="#f4a261" style="background:#f4a261"></div>
+        <div class="color-swatch" data-color="#264653" style="background:#264653"></div>
+        <div class="color-swatch" data-color="#6a4c93" style="background:#6a4c93"></div>
+      </div>
+
+      <button id="btn-join" class="btn btn-success" style="margin-top:1rem;width:100%">Join Game</button>
+    </div>
+
+    <!-- Joined players list (shown after joining) -->
+    <div class="card" id="lobby-info-card" style="margin-top:0.75rem">
+      <p style="font-size:0.85rem;color:var(--text-dim);margin-bottom:0.6rem">Players in lobby:</p>
+      <div id="joined-player-list"></div>
+      <button id="btn-start" class="btn btn-success" style="display:none;margin-top:0.75rem;width:100%">
+        ▶ Start Game
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Game (controller) ──────────────────────────────────────────── -->
+<div id="screen-game-player" class="screen">
+  <div class="player-hud">
+    <div class="hud-block">
+      <div class="hud-label">Damage</div>
+      <div class="hud-value" id="hud-damage">$0</div>
+    </div>
+    <div class="hud-block">
+      <div class="hud-label">Time</div>
+      <div class="hud-value" id="hud-time">60s</div>
+    </div>
+  </div>
+
+  <div id="joystick-zone" style="position:relative">
+    <div>
+      <div class="stick-base">
+        <div id="stick-knob"></div>
+      </div>
+      <div class="stick-hint">Drag to move the laser dot</div>
+    </div>
+    <div id="watching-overlay">
+      <div class="watching-label">Currently playing:</div>
+      <div id="watching-name"></div>
+      <div class="watching-sub">Your turn is coming up…</div>
+    </div>
+    <div id="countdown-overlay-p">
+      <div id="p-countdown-who"></div>
+      <div id="countdown-num">3</div>
+    </div>
+    <div id="roundover-overlay-p">
+      <div class="roundover-title" style="color:#fdf6ee;font-size:2rem;font-weight:900"></div>
+      <div class="roundover-damage" style="color:#f4845f;font-size:2.5rem;font-weight:900"></div>
+      <div class="roundover-name"  style="color:rgba(255,255,255,0.7);font-size:1rem"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── All Done ───────────────────────────────────────────────────── -->
+<div id="screen-alldone-player" class="screen">
+  <div class="container" style="padding-top:1.5rem">
+    <h2 class="game-title" style="font-size:1.5rem;margin-bottom:0.25rem">🏆 Results</h2>
+    <p style="text-align:center;color:var(--text-dim);margin-bottom:1rem;font-size:0.85rem">
+      Lowest damage wins!
+    </p>
+    <div id="p-final-scores"></div>
+    <div style="text-align:center;margin-top:1.25rem">
+      <button id="btn-play-again" class="btn btn-success" style="display:none">Play Again</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Scripts (after all DOM) ───────────────────────────────────── -->
+<script src="/server-info.js" onerror="void 0"></script>
+<script src="js/trystero-peer.js"></script>
+<script src="js/local-peer.js"></script>
+<script src="js/sounds.js"></script>
+<script src="js/player.js"></script>
+</body>
+</html>
